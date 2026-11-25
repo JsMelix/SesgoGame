@@ -4,6 +4,7 @@ const STORAGE_KEY = 'criterio_16bit_progress_v1';
 
 export const DEFAULT_PROGRESS: PlayerProgress = {
   unlockedLevel: 1,
+  completedChapters: [],
   scenarios: {},
   soundMuted: false,
 };
@@ -19,6 +20,9 @@ export function loadProgress(): PlayerProgress {
         typeof parsed.unlockedLevel === 'number' && parsed.unlockedLevel >= 1 && parsed.unlockedLevel <= 5
           ? parsed.unlockedLevel
           : 1,
+      completedChapters: Array.isArray(parsed.completedChapters)
+        ? [...new Set(parsed.completedChapters.filter((id) => Number.isInteger(id) && id >= 1 && id <= 5))]
+        : [],
       scenarios: parsed.scenarios && typeof parsed.scenarios === 'object' ? parsed.scenarios : {},
       soundMuted: Boolean(parsed.soundMuted),
     };

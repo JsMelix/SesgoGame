@@ -808,6 +808,7 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
       {
         id: 'b5_5',
+        isBoss: true,
         kind: 'vox_sentinel',
         linkedScenarioId: 'n5_c3',
         waypoints: [
@@ -817,7 +818,7 @@ export const LAB_LEVELS: LabLevelConfig[] = [
           { x: 18, y: 5 },
         ],
         speed: 2.1,
-        maxHp: 6,
+        maxHp: 14,
       },
     ],
     furniture: [

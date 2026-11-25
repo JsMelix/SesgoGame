@@ -106,3 +106,170 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.title-lockup {
+  background: linear-gradient(145deg, #202034f5, #0d1421fa 70%);
+  border-color: #63647a;
+  border-top: 3px solid #fbbf24;
+  box-shadow: 0 0 0 3px #05070b, 0 20px 65px #000a;
+}
+
+.field-overlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: radial-gradient(circle at 55% 35%, #233b59b5, #060811f5 72%);
+}
+
+.field-book {
+  width: min(56rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: #172034;
+  background: #faf1dc;
+  border: 3px solid #0a101c;
+  box-shadow: 6px 6px 0 #0a101c, 9px 9px 0 #d99a36, 0 24px 90px #000a;
+}
+
+.field-header,
+.field-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem clamp(0.85rem, 3vw, 1.75rem);
+}
+
+.field-header {
+  color: #fbefd6;
+  background: #151b2a;
+  border-bottom: 4px solid #d99a36;
+}
+
+.field-header h2 {
+  margin-top: 0.2rem;
+  font-family: 'Silkscreen', monospace;
+  font-size: clamp(1.1rem, 4vw, 1.9rem);
+  line-height: 1.18;
+}
+
+.field-kicker,
+.field-counter {
+  font: 700 0.72rem/1.4 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.field-header .field-kicker { color: #fbbf24; }
+.field-counter { color: #67e8f9; white-space: nowrap; }
+
+.field-story {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: clamp(0.85rem, 3vw, 1.5rem);
+  align-items: center;
+  padding: clamp(0.85rem, 3vw, 1.75rem);
+  background-image: radial-gradient(#8c735426 1px, transparent 1px);
+  background-size: 7px 7px;
+  animation: field-page-in 160ms ease-out both;
+}
+
+@keyframes field-page-in {
+  from { opacity: 0.5; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.field-art {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-width: 0;
+  border: 3px solid;
+  background: #101726;
+  box-shadow: 4px 4px 0 #172034;
+}
+
+.field-art img {
+  display: block;
+  width: 100%;
+  height: clamp(13rem, 36vw, 21rem);
+  object-fit: cover;
+  object-position: center 40%;
+}
+
+.field-art figcaption {
+  position: absolute;
+  bottom: 0.65rem;
+  left: 0.65rem;
+  max-width: calc(100% - 1.3rem);
+  padding: 0.35rem 0.6rem;
+  color: #171717;
+  background: #fbbf24;
+  border: 2px solid #151b2a;
+  box-shadow: 2px 2px 0 #151b2a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.field-dialogue {
+  padding: 1rem;
+  color: #172034;
+  background: #fffaf2;
+  border: 2px solid #172034;
+  box-shadow: 4px 4px 0 #172034;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.field-dialogue > .field-kicker { color: #9f1239; margin-bottom: 0.35rem; }
+
+.field-mission {
+  padding: 0.75rem;
+  background: #e0f1ec;
+  border-left: 4px solid #14766c;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.field-dialogue .field-mission { margin-top: 0.85rem; }
+.field-mission .field-kicker { margin-bottom: 0.25rem; color: #115e59; }
+.field-actions { border-top: 2px solid #172034; }
+
+.field-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.45rem 0.8rem;
+  border: 2px solid #172034;
+  color: #172034;
+  background: #fffaf2;
+  box-shadow: 2px 2px 0 #172034;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.field-button:hover:not(:disabled) { background: #fce5a4; }
+.field-button:focus-visible { outline: 3px solid #116c94; outline-offset: 3px; }
+.field-button:disabled { cursor: default; }
+.field-actions .field-button:disabled { opacity: 0.5; }
+.field-primary { background: #fbbf24; }
+
+.field-decision { width: min(42rem, 100%); }
+.field-decision-body { display: grid; gap: 1rem; padding: clamp(0.85rem, 3vw, 1.75rem); }
+.field-decision-body > p { font-weight: 700; line-height: 1.55; }
+.field-decision-body > .field-button { justify-self: start; }
+.field-choices { display: grid; gap: 0.6rem; }
+.field-choice { justify-content: start; text-align: left; font-size: 0.9rem; }
+.field-choice[aria-pressed='true'] { background: #fce5a4; }
+
+@media (max-width: 640px) {
+  .field-story { grid-template-columns: 1fr; }
+  .field-art img { height: clamp(8rem, 27dvh, 13rem); }
+  .field-dialogue { font-size: 0.9rem; }
+  .field-actions { font-size: 0.85rem; }
+}

@@ -1,6 +1,7 @@
 import { RotateCcw, Skull } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { BiasGuideModal } from './components/BiasGuideModal';
+import { ChapterDecisionModal } from './components/ChapterDecisionModal';
 import { ComicCutsceneModal } from './components/ComicCutsceneModal';
 import { GameHud } from './components/GameHud';
 import { InventoryHudState, LabCanvas } from './components/LabCanvas';
@@ -41,6 +42,7 @@ export default function App() {
     chestsOpened: 0,
     totalChests: 4,
     overdriveSeconds: 0,
+    dashReady: true,
   });
   const [nearTarget, setNearTarget] = useState<{
     type: NearTargetInfo['type'];
@@ -52,6 +54,7 @@ export default function App() {
   const [touchMoveDir, setTouchMoveDir] = useState<Direction | null>(null);
   const [interactSignal, setInteractSignal] = useState<number>(0);
   const [pulseSignal, setPulseSignal] = useState<number>(0);
+  const [dashSignal, setDashSignal] = useState(0);
   const [labResetCounter, setLabResetCounter] = useState<number>(0);
 
   const currentLevel = getLabLevel(currentLevelId);
@@ -71,11 +74,11 @@ export default function App() {
       setShowLevelSelect(false);
       setShowBiasGuide(false);
       setPlayerHp(5);
+      setLabResetCounter((count) => count + 1);
+      setTouchMoveDir(null);
+      setNearTarget(null);
       setScreen('PLAYING');
-      if (!seenChapters[lvlId]) {
-        setShowComicChapter(true);
-        setSeenChapters((prev) => ({ ...prev, [lvlId]: true }));
-      }
+      setShowComicChapter(!seenChapters[lvlId]);
     },
     [seenChapters]
   );
@@ -136,30 +139,28 @@ export default function App() {
           },
         };
 
-        const lvl = getLabLevel(currentLevelId);
-        const allSolvedInLevel = lvl.terminals.every(
-          (t) => updatedScenarios[t.scenarioId]?.solved
-        );
-        const nextUnlocked =
-          allSolvedInLevel && currentLevelId < 5
-            ? Math.max(prev.unlockedLevel, currentLevelId + 1)
-            : prev.unlockedLevel;
-
-        return {
-          ...prev,
-          unlockedLevel: nextUnlocked,
-          scenarios: updatedScenarios,
-        };
+        return { ...prev, scenarios: updatedScenarios };
       });
     },
-    [currentLevelId]
+    []
   );
 
   const handleReachExit = useCallback(() => {
-    retroAudio.playLevelUnlock();
     setActiveScenarioId(null);
+    setScreen('CHAPTER_DECISION');
+  }, []);
+
+  const handleChapterComplete = () => {
+    retroAudio.playLevelUnlock();
+    setProgress((prev) => ({
+      ...prev,
+      completedChapters: prev.completedChapters.includes(currentLevelId)
+        ? prev.completedChapters
+        : [...prev.completedChapters, currentLevelId],
+      unlockedLevel: Math.max(prev.unlockedLevel, Math.min(5, currentLevelId + 1)),
+    }));
     setScreen(currentLevelId === 5 ? 'VICTORY' : 'LEVEL_COMPLETE');
-  }, [currentLevelId]);
+  };
 
   const handleRetryRoom = useCallback(() => {
     retroAudio.playUiClick();
@@ -211,6 +212,7 @@ export default function App() {
         externalMoveDir={touchMoveDir}
         triggerInteractSignal={interactSignal}
         triggerPulseSignal={pulseSignal}
+        triggerDashSignal={dashSignal}
       />
 
       {screen === 'TITLE_MENU' && (
@@ -221,37 +223,44 @@ export default function App() {
         />
       )}
 
-      {screen !== 'TITLE_MENU' && (
-        <GameHud
-          level={currentLevel}
-          progress={progress}
-          hp={playerHp}
-          maxHp={playerMaxHp}
-          enemiesRemaining={enemiesRemaining}
-          inventory={inventory}
-          streak={streak}
-          nearTarget={nearTarget}
-          onToggleMute={handleToggleMute}
-          onOpenComic={() => setShowComicChapter(true)}
-          onOpenGuide={() => setShowBiasGuide(true)}
-          onOpenLevels={() => setShowLevelSelect(true)}
-          onPause={() => setScreen('PAUSED')}
-          onTouchMove={setTouchMoveDir}
-          onTouchInteract={() => setInteractSignal((s) => s + 1)}
-          onTouchPulse={() => setPulseSignal((s) => s + 1)}
-          onAdvanceLevel={handleReachExit}
-        />
+      {(screen === 'PLAYING' || screen === 'PAUSED') && (
+        <div inert={!isActivePlay}>
+          <GameHud
+            level={currentLevel}
+            progress={progress}
+            hp={playerHp}
+            maxHp={playerMaxHp}
+            enemiesRemaining={enemiesRemaining}
+            inventory={inventory}
+            streak={streak}
+            nearTarget={nearTarget}
+            onToggleMute={handleToggleMute}
+            onOpenComic={() => setShowComicChapter(true)}
+            onOpenGuide={() => setShowBiasGuide(true)}
+            onOpenLevels={() => setShowLevelSelect(true)}
+            onPause={() => setScreen('PAUSED')}
+            onTouchMove={setTouchMoveDir}
+            onTouchInteract={() => setInteractSignal((s) => s + 1)}
+            onTouchPulse={() => setPulseSignal((s) => s + 1)}
+            onTouchDash={() => setDashSignal((signal) => signal + 1)}
+            onAdvanceLevel={handleReachExit}
+          />
+        </div>
       )}
 
       {showComicChapter && (
         <ComicCutsceneModal
           chapter={currentChapter}
-          onFinish={() => setShowComicChapter(false)}
+          onFinish={() => {
+            setSeenChapters((prev) => ({ ...prev, [currentLevelId]: true }));
+            setShowComicChapter(false);
+          }}
         />
       )}
 
       {activeScenario && (
         <ScenarioModal
+          key={activeScenario.id}
           scenario={activeScenario}
           alreadySolved={Boolean(progress.scenarios[activeScenario.id]?.solved)}
           attemptsSoFar={progress.scenarios[activeScenario.id]?.attempts ?? 0}
@@ -312,6 +321,10 @@ export default function App() {
           onReturnToTitle={() => setScreen('TITLE_MENU')}
           onResetAllProgress={handleResetAll}
         />
+      )}
+
+      {screen === 'CHAPTER_DECISION' && (
+        <ChapterDecisionModal chapter={currentChapter} onComplete={handleChapterComplete} />
       )}
 
       {(screen === 'LEVEL_COMPLETE' || screen === 'VICTORY') && (

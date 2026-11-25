@@ -1,4 +1,5 @@
 import { CheckCircle2, Lock, Play, X } from 'lucide-react';
+import { getChapterStory } from '../data/story';
 import { LAB_LEVELS } from '../data/levels';
 import { PlayerProgress } from '../types/game';
 import { retroAudio } from '../utils/audio';
@@ -27,10 +28,10 @@ export function LevelSelectModal({
         <div className="flex items-center justify-between gap-4 px-4 md:px-5 py-3.5 border-b-2 border-[#334155] bg-[#1B2434]">
           <div>
             <h2 id="level-select-title" className="font-pixel text-sm md:text-lg text-[#F8FAFC]">
-              Selección de Niveles
+              Mapa de campaña
             </h2>
             <p className="text-xs text-[#94A3B8] mt-0.5">
-              Completa los 3 escenarios de cada laboratorio para desbloquear el siguiente.
+              Resuelve los tres casos y cierra la decisión del capítulo para avanzar.
             </p>
           </div>
 
@@ -53,12 +54,14 @@ export function LevelSelectModal({
             const solvedCount = lvl.terminals.filter(
               (t) => progress.scenarios[t.scenarioId]?.solved
             ).length;
-            const isCompleted = solvedCount === 3;
+            const isCompleted = progress.completedChapters.includes(lvl.id);
+            const chapter = getChapterStory(lvl.id);
             const isCurrent = lvl.id === currentLevelId;
 
             return (
               <div
                 key={lvl.id}
+                style={{ borderLeft: `4px solid ${lvl.accentColor}` }}
                 className={`border-2 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                   isUnlocked
                     ? 'border-[#475569] bg-[#1B2434]'
@@ -67,17 +70,19 @@ export function LevelSelectModal({
               >
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-pixel text-xs md:text-sm text-[#F8FAFC]">{lvl.title}</span>
+                    <span className="font-pixel text-xs md:text-sm text-[#F8FAFC]">Cap. {lvl.id} · {chapter.chapterTitle}</span>
                     {isCompleted ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#34D399]">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        Completado
+                        Decisión cerrada
                       </span>
                     ) : !isUnlocked ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#94A3B8]">
                         <Lock className="w-3.5 h-3.5" />
                         Se desbloquea al completar el Nivel {lvl.id - 1}
                       </span>
+                    ) : solvedCount === 3 ? (
+                      <span className="text-xs font-semibold text-amber-300">Decisión pendiente</span>
                     ) : isCurrent ? (
                       <span className="text-xs font-semibold text-[#F59E0B]">
                         En curso

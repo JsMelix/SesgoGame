@@ -1,3 +1,4 @@
+import { PARRY_RADIUS } from '../utils/combat';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../data/levels';
 import {
   ChestConfig,
@@ -16,6 +17,9 @@ import {
 export interface ActiveGlitchBot {
   id: string;
   kind: EnemyKind;
+  isBoss: boolean;
+  aimAngle: number;
+  shotAngles: readonly number[];
   linkedScenarioId?: string;
   dropsKeyColor?: KeyColor;
   dropsKeyLabel?: string;
@@ -40,6 +44,7 @@ export interface Projectile {
   fromPlayer: boolean;
   damage?: number;
   isOverdrive?: boolean;
+  isReflected?: boolean;
   life: number;
 }
 
@@ -90,6 +95,8 @@ export interface RenderState {
   walkPhase: number;
   isMoving: boolean;
   playerHitFlash: number;
+  isDashing: boolean;
+  parryRemaining: number;
   attackSwingTimer: number;
   overdriveTimer: number;
   pulseWave: { x: number; y: number; progress: number } | null;
@@ -153,15 +160,40 @@ function drawFloorAndWalls(ctx: CanvasRenderingContext2D, level: LabLevelConfig,
     }
   }
 
-  // Stage spotlights
-  const spotCols = [4, 12, 20];
-  for (let i = 0; i < spotCols.length; i++) {
-    const sx = spotCols[i] * TILE_SIZE;
-    px(ctx, sx + 4, 3, 16, 8, '#0B0F17');
-    const glow = Math.floor(timeSec * 2 + i) % 2 === 0 ? level.accentColor : '#F59E0B';
-    px(ctx, sx + 6, 9, 12, 4, glow);
-    ctx.fillStyle = i === 1 ? 'rgba(245, 158, 11, 0.05)' : 'rgba(239, 68, 68, 0.04)';
-    ctx.fillRect(sx - 18, 48, 60, 72);
+  const roomWidth = GRID_COLS * TILE_SIZE;
+  const roomHeight = GRID_ROWS * TILE_SIZE;
+  const shade = ctx.createRadialGradient(roomWidth / 2, roomHeight / 2, 84, roomWidth / 2, roomHeight / 2, roomWidth * 0.56);
+  shade.addColorStop(0, 'transparent');
+  shade.addColorStop(1, '#020409b5');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, roomWidth, roomHeight);
+
+  for (const col of [4, 12, 20]) {
+    const x = col * TILE_SIZE + TILE_SIZE / 2;
+    const beam = ctx.createLinearGradient(0, 24, 0, 168);
+    const intensity = Math.round(42 + Math.sin(timeSec * 1.8 + col) * 7);
+    beam.addColorStop(0, level.accentColor + intensity.toString(16));
+    beam.addColorStop(1, level.accentColor + '00');
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(x - 6, 26);
+    ctx.lineTo(x + 6, 26);
+    ctx.lineTo(x + 60, 168);
+    ctx.lineTo(x - 60, 168);
+    ctx.closePath();
+    ctx.fill();
+    px(ctx, x - 9, 18, 18, 9, '#060910');
+    px(ctx, x - 6, 23, 12, 3, level.accentColor);
+  }
+
+  for (const terminal of level.terminals) {
+    const x = terminal.tileX * TILE_SIZE + TILE_SIZE / 2;
+    const y = terminal.tileY * TILE_SIZE + TILE_SIZE / 2;
+    const halo = ctx.createRadialGradient(x, y, 4, x, y, 36);
+    halo.addColorStop(0, level.accentColor + '38');
+    halo.addColorStop(1, level.accentColor + '00');
+    ctx.fillStyle = halo;
+    ctx.fillRect(x - 36, y - 36, 72, 72);
   }
 }
 
@@ -631,6 +663,26 @@ function drawLumenCompanion(ctx: CanvasRenderingContext2D, playerX: number, play
   px(ctx, lx + 9, ly + 6, 3, 3, '#F59E0B');
 }
 
+function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, state: RenderState) {
+  if (bot.destroyed || bot.windupTimer <= 0) return;
+  const x = bot.x * TILE_SIZE + 12;
+  const y = bot.y * TILE_SIZE + 12;
+  const isCharge = bot.kind === 'echo_bot';
+  const angle = isCharge ? Math.atan2(state.playerY - bot.y, state.playerX - bot.x) : bot.aimAngle;
+  const length = (isCharge ? 2.5 : 8) * TILE_SIZE;
+  ctx.save();
+  ctx.strokeStyle = isCharge ? '#FBBF24' : '#FB7185';
+  ctx.lineWidth = isCharge ? 3 : 1.5;
+  ctx.setLineDash([6, 5]);
+  for (const offset of isCharge ? [0] : bot.shotAngles) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(angle + offset) * length, y + Math.sin(angle + offset) * length);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawEnemyBot(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, timeSec: number) {
   if (bot.destroyed) return;
   const bx = Math.round(bot.x * TILE_SIZE);
@@ -640,6 +692,19 @@ function drawEnemyBot(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, timeS
 
   if (bot.hitFlash > 0 && Math.floor(bot.hitFlash * 25) % 2 === 0) {
     px(ctx, bx + 2, by + 1, 20, 18, '#FFFFFF');
+    return;
+  }
+
+  if (bot.isBoss) {
+    const glow = bot.hp <= bot.maxHp / 2 ? '#FBBF24' : '#FB7185';
+    px(ctx, bx - 7, by + 3, 38, 16, '#070B16');
+    px(ctx, bx - 4, by + 6, 32, 10, '#51415E');
+    px(ctx, bx + 2, by - 5, 20, 26, '#110C22');
+    px(ctx, bx + 5, by - 3, 14, 22, '#75264A');
+    px(ctx, bx + 7, by + 4, 10, 8, glow);
+    px(ctx, bx + 10, by + 6, 4, 4, '#FFF1DB');
+    px(ctx, bx - 3, by + 8, 4, 5, glow);
+    px(ctx, bx + 23, by + 8, 4, 5, glow);
     return;
   }
 
@@ -671,6 +736,10 @@ function drawEnemyBot(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, timeS
     px(ctx, bx + 6, by + 7, 4, 4, '#F59E0B');
     px(ctx, bx + 14, by + 7, 4, 4, '#F59E0B');
     px(ctx, bx + 7, by + 13, 10, 2, '#FCA5A5');
+  }
+
+  if (bot.kind === 'vox_sentinel' && bot.windupTimer > 0) {
+    px(ctx, bx + 10, by + 7, 4, 4, '#FECACA');
   }
 
   // Key carrier indicator dot above HP bar
@@ -732,6 +801,43 @@ function drawInteractionBubble(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, cx, cy + 7);
+}
+
+function drawRoomMap(
+  ctx: CanvasRenderingContext2D,
+  state: RenderState,
+  exitUnlocked: boolean,
+  camX: number,
+  camY: number,
+) {
+  const { level } = state;
+  const cell = ctx.canvas.width < 400 ? 2 : 3;
+  const width = GRID_COLS * cell;
+  const height = GRID_ROWS * cell;
+  const x = ctx.canvas.width - width - 10;
+  const y = 46;
+  px(ctx, x - 4, y - 4, width + 8, height + 8, '#080D19E8');
+  px(ctx, x, y, width, height, '#192538');
+  for (const wall of level.walls) {
+    px(ctx, x + wall.tileX * cell, y + wall.tileY * cell, wall.widthTiles * cell, wall.heightTiles * cell, '#54647B');
+  }
+  for (const gate of level.gates) {
+    if (!state.openedGates[gate.id]) {
+      px(ctx, x + gate.tileX * cell, y + gate.tileY * cell, gate.widthTiles * cell, gate.heightTiles * cell, '#D49854');
+    }
+  }
+  for (const terminal of level.terminals) {
+    const solved = state.progress.scenarios[terminal.scenarioId]?.solved;
+    const shielded = state.bots.some((bot) => !bot.destroyed && bot.linkedScenarioId === terminal.scenarioId);
+    px(ctx, x + terminal.tileX * cell - 1, y + terminal.tileY * cell - 1, cell + 2, cell + 2,
+      shielded ? '#FB7185' : solved ? '#34D399' : '#67E8F9');
+  }
+  const scale = cell / TILE_SIZE;
+  ctx.strokeStyle = '#9BAAC585';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + camX * scale, y + camY * scale, ctx.canvas.width * scale, ctx.canvas.height * scale);
+  px(ctx, x + level.exitX * cell, y + level.exitY * cell, cell + 1, cell + 1, exitUnlocked ? '#FDE047' : '#94A3B8');
+  px(ctx, x + state.playerX * cell, y + state.playerY * cell, cell + 1, cell + 1, '#FFFFFF');
 }
 
 export function renderLabScene(
@@ -857,6 +963,8 @@ export function renderLabScene(
       ),
   });
 
+  for (const bot of state.bots) drawAttackWarning(ctx, bot, state);
+
   entities.sort((a, b) => a.y - b.y);
   for (const e of entities) {
     e.draw();
@@ -864,12 +972,22 @@ export function renderLabScene(
 
   drawLumenCompanion(ctx, state.playerX, state.playerY, timeSec);
 
+  if (state.isDashing || state.parryRemaining > 0) {
+    const x = state.playerX * TILE_SIZE + 12;
+    const y = state.playerY * TILE_SIZE + 12;
+    ctx.strokeStyle = '#67E8F9';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, state.isDashing ? 15 : PARRY_RADIUS * TILE_SIZE, state.isDashing ? 11 : PARRY_RADIUS * TILE_SIZE, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   for (const proj of state.projectiles) {
     const cx = Math.round(proj.x * TILE_SIZE + 12);
     const cy = Math.round(proj.y * TILE_SIZE + 12);
     if (proj.fromPlayer) {
       px(ctx, cx - 5, cy - 5, 10, 10, '#05070B');
-      px(ctx, cx - 3, cy - 3, 6, 6, proj.isOverdrive ? '#A855F7' : '#F59E0B');
+      px(ctx, cx - 3, cy - 3, 6, 6, proj.isReflected ? '#67E8F9' : proj.isOverdrive ? '#A855F7' : '#F59E0B');
       px(ctx, cx - 1, cy - 1, 2, 2, '#FFFFFF');
     } else {
       px(ctx, cx - 5, cy - 5, 10, 10, '#05070B');
@@ -921,4 +1039,23 @@ export function renderLabScene(
   }
 
   ctx.restore();
+
+  drawRoomMap(ctx, state, exitUnlocked, camX, camY);
+
+  const boss = level.id === 5 ? state.bots.find((bot) => bot.isBoss && !bot.destroyed) : undefined;
+  if (boss && Math.hypot(boss.x - state.playerX, boss.y - state.playerY) < 10) {
+    const width = Math.min(168, ctx.canvas.width - 32);
+    const x = (ctx.canvas.width - width) / 2;
+    const y = Math.round(ctx.canvas.height * 0.77);
+    const phase = boss.hp <= boss.maxHp / 2 ? 2 : 1;
+    const color = phase === 2 ? '#FBBF24' : '#FB7185';
+    px(ctx, x - 5, y - 16, width + 10, 30, '#090C18');
+    px(ctx, x, y + 1, width, 7, '#35283F');
+    px(ctx, x, y + 1, width * boss.hp / boss.maxHp, 7, color);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`VOX-ZERO / FASE ${phase}`, ctx.canvas.width / 2, y - 7);
+  }
 }

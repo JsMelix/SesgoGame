@@ -1,4 +1,4 @@
-export type GameScreen = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'LEVEL_COMPLETE' | 'VICTORY';
+export type GameScreen = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'CHAPTER_DECISION' | 'LEVEL_COMPLETE' | 'VICTORY';
 
 export type Direction = 'down' | 'up' | 'left' | 'right';
 
@@ -64,6 +64,7 @@ export interface TerminalNode {
 }
 
 export interface GlitchBotConfig {
+  isBoss?: boolean;
   id: string;
   kind: EnemyKind;
   linkedScenarioId?: string;
@@ -149,6 +150,7 @@ export interface ScenarioProgress {
 
 export interface PlayerProgress {
   unlockedLevel: number;
+  completedChapters: number[];
   scenarios: Record<string, ScenarioProgress>;
   soundMuted: boolean;
 }

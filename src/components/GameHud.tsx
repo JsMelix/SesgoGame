@@ -12,6 +12,7 @@ import {
   MessageSquareQuote,
   Pause,
   Skull,
+  Wind,
   Volume2,
   VolumeX,
   Zap,
@@ -44,6 +45,7 @@ interface GameHudProps {
   onTouchMove: (dir: Direction | null) => void;
   onTouchInteract: () => void;
   onTouchPulse: () => void;
+  onTouchDash: () => void;
   onAdvanceLevel: () => void;
 }
 
@@ -64,6 +66,7 @@ export function GameHud({
   onTouchMove,
   onTouchInteract,
   onTouchPulse,
+  onTouchDash,
   onAdvanceLevel,
 }: GameHudProps) {
   const solvedCount = level.terminals.filter((t) => progress.scenarios[t.scenarioId]?.solved).length;
@@ -199,7 +202,7 @@ export function GameHud({
       {levelDone && (
         <div className="pointer-events-auto self-center metal-frame-sm px-3.5 py-2 bg-[#064E3B] flex items-center gap-3 max-w-md">
           <span className="text-xs font-semibold text-[#ECFDF5]">
-            ¡Sala despejada! Cruza el portal verde o avanza:
+            Ya tienes las pruebas. Decide qué hacer con ellas.
           </span>
           <button
             type="button"
@@ -209,7 +212,7 @@ export function GameHud({
             }}
             className="metal-btn px-3 py-2 bg-[#10B981] text-[#052E16] font-pixel text-xs whitespace-nowrap shrink-0 cursor-pointer min-h-[44px]"
           >
-            Avanzar
+            Tomar decisión
           </button>
         </div>
       )}
@@ -244,7 +247,11 @@ export function GameHud({
           )}
         </div>
 
-        <div className="pointer-events-auto hidden md:block">
+        <div className="pointer-events-auto hidden md:flex items-center gap-2">
+          <button type="button" onClick={onTouchDash} disabled={!inventory.dashReady}
+            className="metal-btn inline-flex items-center gap-2 px-3 py-2 bg-cyan-950 text-cyan-100 font-pixel text-xs">
+            <Wind size={16} /> {inventory.dashReady ? '[Shift] Esquivar' : 'Recargando esquiva'}
+          </button>
           <button
             type="button"
             onClick={onTouchPulse}
@@ -310,7 +317,11 @@ export function GameHud({
         </div>
 
         {/* Mobile Action Buttons (Bottom-Right Natural Thumb Zone) */}
-        <div className="pointer-events-auto flex items-center gap-2.5 md:hidden">
+        <div className="pointer-events-auto grid grid-cols-2 gap-2 md:hidden">
+          <button type="button" onClick={onTouchDash} disabled={!inventory.dashReady}
+            className="metal-btn col-span-2 justify-self-end inline-flex items-center gap-2 min-h-11 px-2.5 bg-cyan-950 text-cyan-100 font-pixel text-[10px]">
+            <Wind size={16} /> {inventory.dashReady ? 'Esquivar' : 'Recargando'}
+          </button>
           <button
             type="button"
             onClick={onTouchPulse}

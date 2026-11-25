@@ -1,5 +1,6 @@
+import LUMEN_PORTRAIT_SRC from '../assets/images/portrait_lumen_metal_1794619960152.jpg';
 import { AlertCircle, CheckCircle2, RotateCcw, Sparkles, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Scenario, ScenarioOption } from '../types/game';
 import { retroAudio } from '../utils/audio';
 
@@ -11,8 +12,6 @@ interface ScenarioModalProps {
   onClose: () => void;
 }
 
-const LUMEN_PORTRAIT_SRC = '/src/assets/images/portrait_lumen_metal_1794619960152.jpg';
-
 export function ScenarioModal({
   scenario,
   alreadySolved,
@@ -21,34 +20,16 @@ export function ScenarioModal({
   onClose,
 }: ScenarioModalProps) {
   const [hintsRevealed, setHintsRevealed] = useState<number>(0);
-  const [selectedOption, setSelectedOption] = useState<ScenarioOption | null>(null);
-  const [isResolvedNow, setIsResolvedNow] = useState<boolean>(alreadySolved);
-
-  useEffect(() => {
-    setHintsRevealed(0);
-    setSelectedOption(null);
-    setIsResolvedNow(alreadySolved);
-  }, [scenario.id, alreadySolved]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (!selectedOption && ['1', '2', '3', '4'].includes(e.key)) {
-        const idx = Number(e.key) - 1;
-        const opt = scenario.options[idx];
-        if (opt) {
-          e.preventDefault();
-          handleChooseOption(opt);
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, selectedOption, scenario.options]);
+  const [selectedOption, setSelectedOption] = useState<ScenarioOption | null>(() =>
+    alreadySolved ? scenario.options.find((option) => option.isCorrect) ?? null : null
+  );
+  const options = useMemo(() => {
+    const offset = (scenario.levelId + scenario.terminalNumber - 1) % scenario.options.length;
+    return [...scenario.options.slice(offset), ...scenario.options.slice(0, offset)];
+  }, [scenario]);
+  const reviewing = useRef(alreadySolved);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const isResolvedNow = alreadySolved || Boolean(selectedOption?.isCorrect);
 
   const handleRevealHint = () => {
     if (hintsRevealed >= 2) return;
@@ -56,17 +37,35 @@ export function ScenarioModal({
     setHintsRevealed((prev) => Math.min(2, prev + 1));
   };
 
-  const handleChooseOption = (option: ScenarioOption) => {
+  const handleChooseOption = useCallback((option: ScenarioOption) => {
     setSelectedOption(option);
     if (option.isCorrect) {
       retroAudio.playSuccess();
-      setIsResolvedNow(true);
       onAttempt(scenario.id, true, hintsRevealed);
     } else {
       retroAudio.playError();
       onAttempt(scenario.id, false, hintsRevealed);
     }
-  };
+  }, [hintsRevealed, onAttempt, scenario.id]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      } else if (!selectedOption && /^[1-4]$/.test(event.key)) {
+        event.preventDefault();
+        handleChooseOption(options[Number(event.key) - 1]);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleChooseOption, onClose, options, selectedOption]);
+
+  useEffect(() => {
+    if (selectedOption && !reviewing.current) feedbackRef.current?.focus();
+  }, [selectedOption]);
 
   const handleRetry = () => {
     retroAudio.playUiClick();
@@ -123,7 +122,7 @@ export function ScenarioModal({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-[#F59E0B]">
-                01. Escena del Cómic · {scenario.npcName} ({scenario.npcRole})
+                {scenario.npcName} · {scenario.npcRole}
               </span>
               <span className="font-pixel text-[10px] px-2 py-0.5 bg-[#DC2626] text-white border border-[#05070B] -rotate-2">
                 {isResolvedNow ? '¡RESUELTO!' : '¡CASO ACTIVO!'}
@@ -212,10 +211,10 @@ export function ScenarioModal({
           {!selectedOption ? (
             <div className="space-y-2.5 pb-2">
               <div className="text-xs font-semibold text-[#94A3B8]">
-                02. Elige el diagnóstico y análisis más adecuado (intentos ilimitados)
+                ¿Qué explicación respalda mejor la evidencia?
               </div>
               <div className="grid grid-cols-1 gap-2.5">
-                {scenario.options.map((opt, idx) => (
+                {options.map((opt, idx) => (
                   <button
                     key={opt.id}
                     type="button"
@@ -232,6 +231,9 @@ export function ScenarioModal({
             </div>
           ) : (
             <div
+              ref={feedbackRef}
+              tabIndex={-1}
+              aria-label="Consecuencia de tu respuesta"
               className={`border-2 p-4 space-y-4 ${
                 selectedOption.isCorrect
                   ? 'border-[#10B981] bg-[#064E3B]/45'

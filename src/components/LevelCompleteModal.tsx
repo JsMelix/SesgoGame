@@ -1,3 +1,5 @@
+import HERO_PORTRAIT_SRC from '../assets/images/portrait_rocker_hero_1794619960238.jpg';
+import VICTORY_SPLASH_SRC from '../assets/images/comic_victory_splash_1794855574438.jpg';
 import { ArrowRight, Award, RotateCcw } from 'lucide-react';
 import { getLabLevel } from '../data/levels';
 import { getChapterStory } from '../data/story';
@@ -12,9 +14,6 @@ interface LevelCompleteModalProps {
   onReplayLevel: () => void;
   onBackToTitle: () => void;
 }
-
-const HERO_PORTRAIT_SRC = '/src/assets/images/portrait_rocker_hero_1794619960238.jpg';
-const VICTORY_SPLASH_SRC = '/src/assets/images/comic_victory_splash_1794855574438.jpg';
 
 export function LevelCompleteModal({
   levelId,
@@ -38,7 +37,7 @@ export function LevelCompleteModal({
       aria-modal="true"
       aria-labelledby="level-complete-title"
     >
-      <div className="comic-panel w-full max-w-xl overflow-hidden bg-[#131A26]">
+      <div className="comic-panel w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[#131A26]">
         {isFinalVictory && (
           <div className="relative border-b-3 border-[#05070B]">
             <img
@@ -70,17 +69,17 @@ export function LevelCompleteModal({
 
           <div className="space-y-2">
             <div className="text-xs font-mono-num font-bold text-[#34D399]">
-              {isFinalVictory ? '15/15 CASOS COMPLETADOS' : `${level.title.toUpperCase()} SUPERADO`}
+              {isFinalVictory ? 'AUDITORÍA FINAL CERRADA' : `${level.title.toUpperCase()} SUPERADO`}
             </div>
             <h2 id="level-complete-title" className="font-pixel text-lg md:text-2xl text-[#F8FAFC]">
-              {isFinalVictory ? 'Pensamiento Crítico Certificado' : 'Capítulo Completado'}
+              {isFinalVictory ? 'El campus recupera el control' : 'Capítulo Completado'}
             </h2>
             <p className="text-xs md:text-sm font-semibold text-[#0F172A] bg-[#FEF08A] border-2 border-[#05070B] p-3 text-left shadow-[3px_3px_0_#05070B]">
               {story.outroLine}
             </p>
             <p className="text-xs md:text-sm text-[#CBD5E1] leading-relaxed">
               {isFinalVictory
-                ? 'Completaste los 5 capítulos y demostraste que la Inteligencia Artificial fortalece el aprendizaje cuando se combina con observación, evidencia y criterio propio.'
+                ? 'Antes de usar IA para decidir, comprueba la evidencia, pregunta quién puede salir perjudicado y acuerda quién responderá si hay un error.'
                 : `Mitigaste los sesgos clave de este nivel (${level.biasesCovered.join(', ')}). El Nivel ${levelId + 1} ya está desbloqueado.`}
             </p>
           </div>

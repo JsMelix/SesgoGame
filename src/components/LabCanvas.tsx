@@ -9,6 +9,16 @@ import {
   PlayerProgress,
   SwitchConfig,
 } from '../types/game';
+import {
+  DASH_COOLDOWN,
+  DASH_DURATION,
+  DASH_SPEED,
+  directionVectors,
+  PARRY_RADIUS,
+  PARRY_WINDOW,
+  SENTINEL_SHOT_SPEED,
+  sentinelSpread,
+} from '../utils/combat';
 import { retroAudio } from '../utils/audio';
 import {
   ActiveGlitchBot,
@@ -25,6 +35,7 @@ export interface InventoryHudState {
   chestsOpened: number;
   totalChests: number;
   overdriveSeconds: number;
+  dashReady: boolean;
 }
 
 interface LabCanvasProps {
@@ -49,6 +60,7 @@ interface LabCanvasProps {
   externalMoveDir?: Direction | null;
   triggerInteractSignal?: number;
   triggerPulseSignal?: number;
+  triggerDashSignal?: number;
 }
 
 const WORLD_WIDTH = GRID_COLS * TILE_SIZE; // 600
@@ -71,9 +83,11 @@ export function LabCanvas({
   externalMoveDir,
   triggerInteractSignal,
   triggerPulseSignal,
+  triggerDashSignal,
 }: LabCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const heldKeysRef = useRef<Set<string>>(new Set());
+  const lastDashSignal = useRef(triggerDashSignal);
   const externalDirRef = useRef<Direction | null>(null);
 
   const [viewSize, setViewSize] = useState<{ w: number; h: number }>({
@@ -95,6 +109,11 @@ export function LabCanvas({
     shakeTime: 0,
     hitstopTime: 0,
     pulseCooldown: 0,
+    dashCooldown: 0,
+    dashRemaining: 0,
+    dashVx: 0,
+    dashVy: 0,
+    parryRemaining: 0,
     pulseWave: null as { x: number; y: number; progress: number } | null,
     targetWalkPos: null as { x: number; y: number; autoAction?: () => void } | null,
     camX: 0,
@@ -168,6 +187,7 @@ export function LabCanvas({
       chestsOpened,
       totalChests: lvl.chests.length,
       overdriveSeconds: Math.ceil(s.overdriveTimer),
+      dashReady: s.dashCooldown <= 0,
     });
   };
 
@@ -176,6 +196,9 @@ export function LabCanvas({
     const initialBots = level.bots.map((b) => ({
       id: b.id,
       kind: b.kind,
+      isBoss: Boolean(b.isBoss),
+      aimAngle: 0,
+      shotAngles: [0],
       linkedScenarioId: b.linkedScenarioId,
       dropsKeyColor: b.dropsKeyColor,
       dropsKeyLabel: b.dropsKeyLabel,
@@ -190,7 +213,7 @@ export function LabCanvas({
       dashVy: 0,
       shootCooldown: 2.0 + Math.random() * 1.2,
       wpIndex: 1 % b.waypoints.length,
-      destroyed: Boolean(b.linkedScenarioId && progress.scenarios[b.linkedScenarioId]?.solved),
+      destroyed: Boolean(!b.isBoss && b.linkedScenarioId && progress.scenarios[b.linkedScenarioId]?.solved),
     }));
 
     // If a key-dropping bot was already cleared on re-entry, spawn its key on the floor so gates stay openable
@@ -223,6 +246,11 @@ export function LabCanvas({
       shakeTime: 0,
       hitstopTime: 0,
       pulseCooldown: 0,
+      dashCooldown: 0,
+      dashRemaining: 0,
+      dashVx: 0,
+      dashVy: 0,
+      parryRemaining: 0,
       pulseWave: null,
       targetWalkPos: null,
       camX: 0,
@@ -244,6 +272,7 @@ export function LabCanvas({
       chestsOpened: 0,
       totalChests: level.chests.length,
       overdriveSeconds: 0,
+      dashReady: true,
     });
   }, [level.id]);
 
@@ -252,6 +281,8 @@ export function LabCanvas({
       heldKeysRef.current.clear();
       simRef.current.isMoving = false;
       simRef.current.targetWalkPos = null;
+      simRef.current.dashRemaining = 0;
+      simRef.current.parryRemaining = 0;
     }
   }, [isActivePlay]);
 
@@ -633,6 +664,7 @@ export function LabCanvas({
     const isOverdrive = s.overdriveTimer > 0;
     s.pulseCooldown = isOverdrive ? 0.24 : 0.38;
     s.attackSwingTimer = 0.22;
+    s.parryRemaining = PARRY_WINDOW;
     s.pulseWave = { x: s.playerX, y: s.playerY, progress: 0.08 };
     retroAudio.playPulseZap();
 
@@ -695,6 +727,24 @@ export function LabCanvas({
         damageBot(bot, dmg, kx, ky);
       }
     }
+  };
+
+  const startDash = () => {
+    const s = simRef.current;
+    if (!propsRef.current.isActivePlay || s.dashCooldown > 0 || s.hp <= 0) return;
+    const keys = heldKeysRef.current;
+    const x = Number(keys.has('d') || keys.has('arrowright')) - Number(keys.has('a') || keys.has('arrowleft'));
+    const y = Number(keys.has('s') || keys.has('arrowdown')) - Number(keys.has('w') || keys.has('arrowup'));
+    const [dx, dy] = x || y ? [x, y] : directionVectors[externalDirRef.current ?? s.dir];
+    const length = Math.hypot(dx, dy);
+    s.dashVx = dx / length;
+    s.dashVy = dy / length;
+    s.dashRemaining = DASH_DURATION;
+    s.dashCooldown = DASH_COOLDOWN;
+    s.targetWalkPos = null;
+    retroAudio.playDash();
+    spawnSparks(s.playerX, s.playerY, '#67E8F9', 9);
+    syncInventoryHud();
   };
 
   const triggerInteraction = () => {
@@ -761,9 +811,17 @@ export function LabCanvas({
   }, [triggerPulseSignal]);
 
   useEffect(() => {
+    if (triggerDashSignal !== lastDashSignal.current) {
+      lastDashSignal.current = triggerDashSignal;
+      startDash();
+    }
+  }, [triggerDashSignal]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!propsRef.current.isActivePlay) return;
       const key = e.key.toLowerCase();
+      if ((key === ' ' || key === 'enter') && e.target instanceof HTMLButtonElement) return;
 
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
         e.preventDefault();
@@ -774,8 +832,13 @@ export function LabCanvas({
         return;
       }
 
-      if (key === 'q' || key === 'shift' || key === 'j') {
+      if (key === 'q' || key === 'j') {
         if (!e.repeat) fireGuitarAttack();
+        return;
+      }
+
+      if (key === 'shift') {
+        if (!e.repeat) startDash();
         return;
       }
 
@@ -809,10 +872,11 @@ export function LabCanvas({
     let lastTime = performance.now();
     let lastReportedKey = '';
     let lastReportedOverdriveSec = 0;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const applyPlayerHit = () => {
       const s = simRef.current;
-      if (s.hitCooldown > 0) return;
+      if (s.hitCooldown > 0 || s.dashRemaining > 0 || s.hp <= 0) return;
       s.hitCooldown = 1.1;
       s.hitFlash = 0.65;
       s.shakeTime = 0.22;
@@ -853,6 +917,10 @@ export function LabCanvas({
         s.attackSwingTimer = Math.max(0, s.attackSwingTimer - dt);
         s.shakeTime = Math.max(0, s.shakeTime - dt);
         s.pulseCooldown = Math.max(0, s.pulseCooldown - dt);
+        const dashWasCooling = s.dashCooldown > 0;
+        s.dashCooldown = Math.max(0, s.dashCooldown - dt);
+        if (dashWasCooling && s.dashCooldown === 0) syncInventoryHud();
+        s.parryRemaining = Math.max(0, s.parryRemaining - dt);
 
         if (s.overdriveTimer > 0) {
           s.overdriveTimer = Math.max(0, s.overdriveTimer - dt);
@@ -890,6 +958,12 @@ export function LabCanvas({
           }
         }
 
+        const dashing = s.dashRemaining > 0;
+        if (dashing) {
+          vx = s.dashVx;
+          vy = s.dashVy;
+        }
+
         if (vx !== 0 || vy !== 0) {
           const len = Math.hypot(vx, vy);
           vx /= len;
@@ -900,8 +974,9 @@ export function LabCanvas({
             s.dir = vy > 0 ? 'down' : 'up';
           }
 
-          const nextX = s.playerX + vx * PLAYER_SPEED * dt;
-          const nextY = s.playerY + vy * PLAYER_SPEED * dt;
+          const distance = dashing ? DASH_SPEED * Math.min(dt, s.dashRemaining) : PLAYER_SPEED * dt;
+          const nextX = s.playerX + vx * distance;
+          const nextY = s.playerY + vy * distance;
 
           // Auto-unlock key gate when walking right up to it while holding matching key
           for (const g of lvl.gates) {
@@ -1005,8 +1080,25 @@ export function LabCanvas({
                 }
               }
             }
-          } else if (!remove && !p.fromPlayer) {
-            if (Math.hypot(s.playerX - p.x, s.playerY - p.y) < 0.68) {
+          } else if (!remove) {
+            const distance = Math.hypot(s.playerX - p.x, s.playerY - p.y);
+            if (s.parryRemaining > 0 && distance < PARRY_RADIUS) {
+              p.fromPlayer = true;
+              p.isReflected = true;
+              p.damage = 3;
+              p.vx *= -2.5;
+              p.vy *= -2.5;
+              p.life = 1.05;
+              retroAudio.playParry();
+              spawnSparks(p.x, p.y, '#67E8F9', 10);
+              s.popups.push({
+                x: s.playerX * TILE_SIZE + 12,
+                y: s.playerY * TILE_SIZE - 12,
+                text: '¡REBOTE!',
+                color: '#67E8F9',
+                life: 0.65,
+              });
+            } else if (distance < 0.68 && s.dashRemaining === 0) {
               applyPlayerHit();
               remove = true;
             }
@@ -1061,7 +1153,7 @@ export function LabCanvas({
             }
           } else {
             const cfg = lvl.bots.find((b) => b.id === bot.id);
-            if (cfg && cfg.waypoints.length > 0) {
+            if (bot.windupTimer === 0 && cfg && cfg.waypoints.length > 0) {
               const wp = cfg.waypoints[bot.wpIndex % cfg.waypoints.length];
               const dx = wp.x - bot.x;
               const dy = wp.y - bot.y;
@@ -1074,18 +1166,28 @@ export function LabCanvas({
             }
 
             if (bot.kind === 'vox_sentinel') {
-              bot.shootCooldown -= dt;
-              if (bot.shootCooldown <= 0 && distToPlayer < 7.2) {
-                bot.shootCooldown = 2.2;
-                const d = Math.max(0.1, distToPlayer);
-                s.projectiles.push({
-                  x: bot.x,
-                  y: bot.y,
-                  vx: ((s.playerX - bot.x) / d) * 4.5,
-                  vy: ((s.playerY - bot.y) / d) * 4.5,
-                  fromPlayer: false,
-                  life: 2.2,
-                });
+              bot.shootCooldown = Math.max(0, bot.shootCooldown - dt);
+              if (bot.windupTimer > 0) {
+                bot.windupTimer = Math.max(0, bot.windupTimer - dt);
+                if (bot.windupTimer === 0) {
+                  for (const offset of bot.shotAngles) {
+                    const angle = bot.aimAngle + offset;
+                    s.projectiles.push({
+                      x: bot.x,
+                      y: bot.y,
+                      vx: Math.cos(angle) * SENTINEL_SHOT_SPEED,
+                      vy: Math.sin(angle) * SENTINEL_SHOT_SPEED,
+                      fromPlayer: false,
+                      life: 1.85,
+                    });
+                  }
+                }
+              } else if (bot.shootCooldown === 0 && distToPlayer < (bot.isBoss ? 9 : 7.2)) {
+                bot.aimAngle = Math.atan2(s.playerY - bot.y, s.playerX - bot.x);
+                bot.shotAngles = sentinelSpread(bot.isBoss, bot.hp, bot.maxHp);
+                bot.windupTimer = bot.isBoss ? 0.75 : 0.55;
+                bot.shootCooldown = bot.shotAngles.length > 3 ? 1.75 : 2.5;
+                if (bot.isBoss) retroAudio.playBossCharge();
               }
             }
           }
@@ -1094,6 +1196,7 @@ export function LabCanvas({
             applyPlayerHit();
           }
         }
+        s.dashRemaining = Math.max(0, s.dashRemaining - dt);
       } else {
         s.isMoving = false;
       }
@@ -1136,7 +1239,7 @@ export function LabCanvas({
       s.camX += (targetCamX - s.camX) * Math.min(1, dt * 10);
       s.camY += (targetCamY - s.camY) * Math.min(1, dt * 10);
 
-      const shakeMag = s.shakeTime > 0 ? s.shakeTime * 18 : 0;
+      const shakeMag = reduceMotion.matches ? 0 : s.shakeTime * 18;
       const shakeOffset = {
         x: (Math.random() - 0.5) * shakeMag,
         y: (Math.random() - 0.5) * shakeMag,
@@ -1175,6 +1278,8 @@ export function LabCanvas({
               walkPhase: s.walkPhase,
               isMoving: s.isMoving,
               playerHitFlash: s.hitFlash,
+              isDashing: s.dashRemaining > 0,
+              parryRemaining: s.parryRemaining,
               attackSwingTimer: s.attackSwingTimer,
               overdriveTimer: s.overdriveTimer,
               pulseWave: s.pulseWave,
@@ -1207,10 +1312,15 @@ export function LabCanvas({
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isActivePlay || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
-    const relY = (e.clientY - rect.top) / rect.height;
-    const worldPxX = simRef.current.camX + relX * viewSize.w;
-    const worldPxY = simRef.current.camY + relY * viewSize.h;
+    const scale = Math.min(rect.width / viewSize.w, rect.height / viewSize.h);
+    if (scale <= 0) return;
+    const offsetX = (rect.width - viewSize.w * scale) / 2;
+    const offsetY = (rect.height - viewSize.h * scale) / 2;
+    const localX = (e.clientX - rect.left - offsetX) / scale;
+    const localY = (e.clientY - rect.top - offsetY) / scale;
+    if (localX < 0 || localX >= viewSize.w || localY < 0 || localY >= viewSize.h) return;
+    const worldPxX = simRef.current.camX + localX;
+    const worldPxY = simRef.current.camY + localY;
     const tileX = worldPxX / TILE_SIZE;
     const tileY = worldPxY / TILE_SIZE;
 

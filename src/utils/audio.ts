@@ -107,6 +107,19 @@ class HeavyMetalAudioEngine {
     this.playTone(980, 0.12, 'square', 0.025, 0.03, 210, true);
   }
 
+  playDash() {
+    this.playTone(190, 0.14, 'triangle', 0.032, 0, 520);
+  }
+
+  playParry() {
+    this.playPowerChord(329.63, 0.09);
+    this.playTone(1174.66, 0.13, 'square', 0.021, 0.045);
+  }
+
+  playBossCharge() {
+    this.playTone(73.42, 0.4, 'sawtooth', 0.033, 0, 145, true);
+  }
+
   playEnemyHit() {
     this.playTone(320, 0.07, 'square', 0.032, 0, 180, true);
   }
