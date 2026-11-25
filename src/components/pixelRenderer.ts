@@ -1,3 +1,6 @@
+import { circuitPhase } from '../game/hazards';
+import type { ArenaTile } from '../game/arenaGrid';
+import type { ArenaObjective } from '../game/objectives';
 import { PARRY_RADIUS } from '../utils/combat';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../data/levels';
 import {
@@ -29,6 +32,7 @@ export interface ActiveGlitchBot {
   maxHp: number;
   hitFlash: number;
   windupTimer: number;
+  recoveryTimer: number;
   dashTimer: number;
   dashVx: number;
   dashVy: number;
@@ -110,8 +114,11 @@ export interface RenderState {
   popups: ComicPopup[];
   shakeOffset: { x: number; y: number };
   timeSec: number;
+  roomTime: number;
   progress: PlayerProgress;
   nearestTarget: NearTargetInfo | null;
+  objective: ArenaObjective | null;
+  path: ArenaTile[];
 }
 
 function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
@@ -125,78 +132,6 @@ function keyHex(color?: KeyColor): string {
   return '#F59E0B';
 }
 
-function drawFloorAndWalls(ctx: CanvasRenderingContext2D, level: LabLevelConfig, timeSec: number) {
-  for (let row = 0; row < GRID_ROWS; row++) {
-    for (let col = 0; col < GRID_COLS; col++) {
-      const x = col * TILE_SIZE;
-      const y = row * TILE_SIZE;
-
-      if (row === 0 || row === 1) {
-        px(ctx, x, y, TILE_SIZE, TILE_SIZE, level.wallColor);
-        px(ctx, x, y, TILE_SIZE, 2, '#475569');
-        px(ctx, x + 3, y + 4, 2, 2, '#64748B');
-        px(ctx, x + 19, y + 4, 2, 2, '#64748B');
-        if (row === 1) {
-          px(ctx, x, y + 18, TILE_SIZE, 6, level.wallTrimColor);
-          px(ctx, x, y + 17, TILE_SIZE, 1, '#64748B');
-        } else {
-          px(ctx, x, y, TILE_SIZE, 3, level.wallTrimColor);
-        }
-      } else if (row === GRID_ROWS - 1 || col === 0 || col === GRID_COLS - 1) {
-        px(ctx, x, y, TILE_SIZE, TILE_SIZE, level.wallTrimColor);
-        px(ctx, x + 3, y + 3, TILE_SIZE - 6, TILE_SIZE - 6, '#1E293B');
-        px(ctx, x + 5, y + 5, 2, 2, '#64748B');
-        px(ctx, x + TILE_SIZE - 7, y + 5, 2, 2, '#64748B');
-      } else {
-        const isAlt = (row + col) % 2 === 0;
-        px(ctx, x, y, TILE_SIZE, TILE_SIZE, isAlt ? level.floorPrimary : level.floorSecondary);
-        px(ctx, x, y, TILE_SIZE, 1, 'rgba(148,163,184,0.12)');
-        px(ctx, x, y, 1, TILE_SIZE, 'rgba(148,163,184,0.08)');
-        if (isAlt && (row + col) % 4 === 0) {
-          px(ctx, x + 6, y + 6, 3, 2, 'rgba(148,163,184,0.16)');
-          px(ctx, x + 15, y + 15, 3, 2, 'rgba(148,163,184,0.16)');
-        }
-      }
-    }
-  }
-
-  const roomWidth = GRID_COLS * TILE_SIZE;
-  const roomHeight = GRID_ROWS * TILE_SIZE;
-  const shade = ctx.createRadialGradient(roomWidth / 2, roomHeight / 2, 84, roomWidth / 2, roomHeight / 2, roomWidth * 0.56);
-  shade.addColorStop(0, 'transparent');
-  shade.addColorStop(1, '#020409b5');
-  ctx.fillStyle = shade;
-  ctx.fillRect(0, 0, roomWidth, roomHeight);
-
-  for (const col of [4, 12, 20]) {
-    const x = col * TILE_SIZE + TILE_SIZE / 2;
-    const beam = ctx.createLinearGradient(0, 24, 0, 168);
-    const intensity = Math.round(42 + Math.sin(timeSec * 1.8 + col) * 7);
-    beam.addColorStop(0, level.accentColor + intensity.toString(16));
-    beam.addColorStop(1, level.accentColor + '00');
-    ctx.fillStyle = beam;
-    ctx.beginPath();
-    ctx.moveTo(x - 6, 26);
-    ctx.lineTo(x + 6, 26);
-    ctx.lineTo(x + 60, 168);
-    ctx.lineTo(x - 60, 168);
-    ctx.closePath();
-    ctx.fill();
-    px(ctx, x - 9, 18, 18, 9, '#060910');
-    px(ctx, x - 6, 23, 12, 3, level.accentColor);
-  }
-
-  for (const terminal of level.terminals) {
-    const x = terminal.tileX * TILE_SIZE + TILE_SIZE / 2;
-    const y = terminal.tileY * TILE_SIZE + TILE_SIZE / 2;
-    const halo = ctx.createRadialGradient(x, y, 4, x, y, 36);
-    halo.addColorStop(0, level.accentColor + '38');
-    halo.addColorStop(1, level.accentColor + '00');
-    ctx.fillStyle = halo;
-    ctx.fillRect(x - 36, y - 36, 72, 72);
-  }
-}
-
 function drawInteriorWalls(ctx: CanvasRenderingContext2D, walls: WallBlock[], level: LabLevelConfig) {
   for (const w of walls) {
     for (let dy = 0; dy < w.heightTiles; dy++) {
@@ -208,7 +143,11 @@ function drawInteriorWalls(ctx: CanvasRenderingContext2D, walls: WallBlock[], le
         // Steel partition block
         px(ctx, x, y, TILE_SIZE, TILE_SIZE, '#05070B');
         px(ctx, x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2, level.wallColor);
-        px(ctx, x + 2, y + 2, TILE_SIZE - 4, 5, '#475569');
+        px(ctx, x + 2, y + 2, TILE_SIZE - 4, 4, '#52627B');
+        px(ctx, x + 2, y + 6, TILE_SIZE - 4, 1, '#A9C4E3A0');
+        px(ctx, x + 7, y + 8, TILE_SIZE - 14, 8, '#101827');
+        for (let vent = 9; vent < 17; vent += 3) px(ctx, x + vent, y + 10, 1, 4, '#637893');
+        if ((dx + dy) % 3 === 0) px(ctx, x + 16, y + 18, 3, 1, level.accentColor);
         px(ctx, x + 2, y + TILE_SIZE - 6, TILE_SIZE - 4, 4, level.wallTrimColor);
         // Rivets
         px(ctx, x + 4, y + 9, 2, 2, '#94A3B8');
@@ -501,6 +440,12 @@ function drawTerminal(
 
   const bob = Math.round(Math.sin(timeSec * 4 + node.terminalNumber) * 2);
   const badgeY = y - 14 + bob;
+  px(ctx, x - 5, badgeY, 12, 12, '#05070B');
+  ctx.fillStyle = '#E0F2FE';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(node.terminalNumber), x + 1, badgeY + 6);
   px(ctx, x + 5, badgeY, 14, 12, '#05070B');
   px(
     ctx,
@@ -571,9 +516,14 @@ function drawHeroKael(
   px(ctx, x + 13, y + 14, 5, 4, '#1E293B');
 
   px(ctx, x + 4, y + 7, 16, 8, '#05070B');
-  px(ctx, x + 5, y + 8, 14, 6, '#1D4ED8');
+  px(ctx, x + 5, y + 8, 14, 6, '#354361');
+  px(ctx, x + 5, y + 9, 3, 5, '#20314C');
+  px(ctx, x + 16, y + 9, 3, 5, '#20314C');
   px(ctx, x + 9, y + 8, 6, 6, '#111827');
   px(ctx, x + 10, y + 9, 4, 3, '#EF4444');
+  px(ctx, x + 10, y + 9, 2, 2, '#FFD78B');
+  px(ctx, x + 8, y + 12, 8, 1, '#849ABC');
+  px(ctx, x + 8, y + 13, 2, 1, '#E2E8F0');
   px(ctx, x + 5, y + 8, 2, 1, '#E2E8F0');
   px(ctx, x + 17, y + 8, 2, 1, '#E2E8F0');
   px(ctx, x + 6, y + 6, 3, 3, '#334155');
@@ -588,7 +538,9 @@ function drawHeroKael(
   px(ctx, x + 6, y - 7, 3, 3, '#0F172A');
   px(ctx, x + 11, y - 8, 3, 4, '#1E293B');
   px(ctx, x + 15, y - 6, 3, 3, '#0F172A');
-  px(ctx, x + 8, y - 4, 2, 1, '#334155');
+  px(ctx, x + 8, y - 4, 2, 1, '#526583');
+  px(ctx, x + 12, y - 6, 2, 1, '#526583');
+  px(ctx, x + 6, y, 12, 1, '#BB5650');
 
   if (dir === 'up') {
     px(ctx, x + 7, y - 1, 10, 7, '#0F172A');
@@ -663,13 +615,13 @@ function drawLumenCompanion(ctx: CanvasRenderingContext2D, playerX: number, play
   px(ctx, lx + 9, ly + 6, 3, 3, '#F59E0B');
 }
 
-function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, state: RenderState) {
+function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot) {
   if (bot.destroyed || bot.windupTimer <= 0) return;
   const x = bot.x * TILE_SIZE + 12;
   const y = bot.y * TILE_SIZE + 12;
   const isCharge = bot.kind === 'echo_bot';
-  const angle = isCharge ? Math.atan2(state.playerY - bot.y, state.playerX - bot.x) : bot.aimAngle;
-  const length = (isCharge ? 2.5 : 8) * TILE_SIZE;
+  const angle = bot.aimAngle;
+  const length = (isCharge ? 3 : 8) * TILE_SIZE;
   ctx.save();
   ctx.strokeStyle = isCharge ? '#FBBF24' : '#FB7185';
   ctx.lineWidth = isCharge ? 3 : 1.5;
@@ -689,6 +641,11 @@ function drawEnemyBot(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, timeS
   const by = Math.round(bot.y * TILE_SIZE + Math.sin(timeSec * 5 + bot.x) * 2);
 
   px(ctx, bx + 4, by + 20, 16, 3, 'rgba(0,0,0,0.45)');
+  if (bot.recoveryTimer > 0) {
+    ctx.strokeStyle = '#67E8F9';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx - 1, by - 3, 26, 25);
+  }
 
   if (bot.hitFlash > 0 && Math.floor(bot.hitFlash * 25) % 2 === 0) {
     px(ctx, bx + 2, by + 1, 20, 18, '#FFFFFF');
@@ -837,6 +794,12 @@ function drawRoomMap(
   ctx.lineWidth = 1;
   ctx.strokeRect(x + camX * scale, y + camY * scale, ctx.canvas.width * scale, ctx.canvas.height * scale);
   px(ctx, x + level.exitX * cell, y + level.exitY * cell, cell + 1, cell + 1, exitUnlocked ? '#FDE047' : '#94A3B8');
+  if (state.objective) {
+    const ox = x + state.objective.x * cell;
+    const oy = y + state.objective.y * cell;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeRect(ox - 2, oy - 2, cell + 4, cell + 4);
+  }
   px(ctx, x + state.playerX * cell, y + state.playerY * cell, cell + 1, cell + 1, '#FFFFFF');
 }
 
@@ -855,8 +818,28 @@ export function renderLabScene(
     Math.round(-camY + state.shakeOffset.y)
   );
 
-  drawFloorAndWalls(ctx, level, timeSec);
+  for (const circuit of level.circuits ?? []) {
+    const phase = circuitPhase(state.roomTime, circuit.offset);
+    const color = phase === 'live' ? '#FB7185' : phase === 'warning' ? '#FBBF24' : '#477380';
+    const x = circuit.tileX * TILE_SIZE;
+    const y = circuit.tileY * TILE_SIZE;
+    const width = circuit.widthTiles * TILE_SIZE;
+    px(ctx, x, y + 1, width, TILE_SIZE - 2, phase === 'live' ? '#831124' : '#081722');
+    px(ctx, x, y + 1, width, 2, color);
+    px(ctx, x, y + TILE_SIZE - 3, width, 2, color);
+    for (let stripe = 4; stripe < width - 4; stripe += 8) {
+      px(ctx, x + stripe, y + 8, 4, 8, color);
+    }
+  }
+
   drawCircuitConduits(ctx, level, progress, state.bots);
+  for (const [index, point] of state.path.entries()) {
+    const x = point.x * TILE_SIZE + 12;
+    const y = point.y * TILE_SIZE + 12;
+    const color = index === state.path.length - 1 ? '#A5F3FC' : '#67E8F9A0';
+    px(ctx, x - 2, y - 1, 4, 2, color);
+    px(ctx, x - 1, y - 2, 2, 4, color);
+  }
   drawInteriorWalls(ctx, level.walls, level);
 
   for (const gate of level.gates) {
@@ -963,7 +946,7 @@ export function renderLabScene(
       ),
   });
 
-  for (const bot of state.bots) drawAttackWarning(ctx, bot, state);
+  for (const bot of state.bots) drawAttackWarning(ctx, bot);
 
   entities.sort((a, b) => a.y - b.y);
   for (const e of entities) {

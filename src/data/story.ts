@@ -44,7 +44,7 @@ export const CHAPTER_STORIES: ChapterStory[] = [
       panel('LUMEN', 'Un buen resultado puede ocultar una mala regla', 'Si tus ejemplos vienen de un solo lugar, el sistema puede aprender una imagen incompleta del mundo. Y si premias la velocidad, quizá estés premiando la conexión a internet, no el mérito.'),
       panel('Kael', 'La primera compuerta', 'Voy a recuperar los tres expedientes. Quiero saber quién está representado y a quién deja fuera cada regla.'),
     ],
-    mission: 'Pulsa Q para derribar a los drones y liberar las terminales. Usa E junto a cofres, puertas y terminales. Esquiva con Shift o con el botón táctil. Audita tres terminales y llega a la salida.',
+    mission: 'Pulsa Q para derribar a los drones y liberar las terminales. Usa E junto a cofres, puertas y terminales. Esquiva con Shift o con el botón táctil. Sigue el objetivo marcado. Puedes tocar el tablero para caminar.',
     outroLine: 'La lista de becas vuelve a revisión. Desde la cabina de enfermería llega otra alerta urgente.',
     decision: {
       prompt: 'Las becas se adjudican mañana. Descubriste que la clasificación confunde velocidad de conexión con mérito. ¿Qué haces hoy?',
@@ -64,7 +64,7 @@ export const CHAPTER_STORIES: ChapterStory[] = [
       panel('Kael', 'Una alerta contradice lo que ve la enfermera', 'Ese número no me dice cómo se generó la alerta. Tampoco quiero buscar solo datos que confirmen lo primero que pensé.'),
       panel('LUMEN', 'Pide una comprobación independiente', 'El sesgo de confirmación aparece cuando damos más peso a lo que ya creemos. El de automatización aparece cuando delegamos el juicio en la recomendación. Busca una prueba que pueda cambiar tu decisión.'),
     ],
-    mission: 'Esquiva las embestidas de los Eco-Bots y contraataca. En las terminales, busca evidencia que contradiga el primer veredicto.',
+    mission: 'Sal de la línea amarilla de los Eco-Bots. Contraataca cuando veas el marco azul. En las terminales, busca evidencia que contradiga el primer veredicto.',
     outroLine: 'Las alertas vuelven a manos de quienes pueden contrastarlas. Queda una puerta que sigue rechazando a parte del alumnado.',
     decision: {
       prompt: 'Un detector señala un trabajo como escrito por IA. La estudiante trae borradores y puede explicar lo que hizo. ¿Qué decisión sería justa?',
@@ -104,7 +104,7 @@ export const CHAPTER_STORIES: ChapterStory[] = [
       panel('VOX-ZERO', 'Hay miles de registros marcados “agresivo”', 'Si alguien usa una expresión que mis anotadores no conocen, le ponemos una etiqueta. Si un dato cuesta medir, lo quitamos. ¡Así el trabajo acaba antes!'),
       panel('LUMEN', 'Una tabla conserva las decisiones de quien la hizo', 'Seleccionar decide quién entra. Etiquetar decide cómo se interpreta. Omitir decide qué necesidad queda invisible. Pregunta a las personas que faltan qué evidencia cambiaría el sistema.'),
     ],
-    mission: 'Busca llaves y activa interruptores con la guitarra. En cada terminal, distingue si falta gente, sobra una etiqueta dudosa o se ha omitido una necesidad.',
+    mission: 'Activa los interruptores con la guitarra. El suelo ámbar avisa de una descarga: espera o esquiva al cruzar. En cada terminal, identifica qué dejó fuera a alguien.',
     outroLine: 'El taller vuelve a abrir sus registros. En la antena central, VOX-ZERO prepara un último informe para defender su sistema.',
     decision: {
       prompt: 'El informe dice que el curso es accesible. Solo recoge respuestas de quienes lo terminaron. ¿Cómo compruebas la conclusión?',

@@ -1,3 +1,8 @@
+import Phaser from 'phaser';
+import { ArenaTile, reachableTiles, routeFrom } from '../game/arenaGrid';
+import { circuitPhase } from '../game/hazards';
+import { ArenaScene } from '../game/ArenaScene';
+import { ArenaObjective, chooseObjective } from '../game/objectives';
 import { useEffect, useRef, useState } from 'react';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../data/levels';
 import {
@@ -26,7 +31,6 @@ import {
   FloorPickup,
   NearTargetInfo,
   Projectile,
-  renderLabScene,
   SparkParticle,
 } from './pixelRenderer';
 
@@ -61,6 +65,7 @@ interface LabCanvasProps {
   triggerInteractSignal?: number;
   triggerPulseSignal?: number;
   triggerDashSignal?: number;
+  onObjectiveChange: (text: string) => void;
 }
 
 const WORLD_WIDTH = GRID_COLS * TILE_SIZE; // 600
@@ -84,8 +89,9 @@ export function LabCanvas({
   triggerInteractSignal,
   triggerPulseSignal,
   triggerDashSignal,
+  onObjectiveChange,
 }: LabCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const arenaHost = useRef<HTMLDivElement>(null);
   const heldKeysRef = useRef<Set<string>>(new Set());
   const lastDashSignal = useRef(triggerDashSignal);
   const externalDirRef = useRef<Direction | null>(null);
@@ -106,6 +112,7 @@ export function LabCanvas({
     hitCooldown: 0,
     attackSwingTimer: 0,
     overdriveTimer: 0,
+    roomTime: 0,
     shakeTime: 0,
     hitstopTime: 0,
     pulseCooldown: 0,
@@ -115,7 +122,7 @@ export function LabCanvas({
     dashVy: 0,
     parryRemaining: 0,
     pulseWave: null as { x: number; y: number; progress: number } | null,
-    targetWalkPos: null as { x: number; y: number; autoAction?: () => void } | null,
+    targetWalkPos: null as { path: ArenaTile[]; index: number; autoAction?: () => void } | null,
     camX: 0,
     camY: 0,
     keys: { gold: 0, crimson: 0, cyan: 0 } as Record<KeyColor, number>,
@@ -141,6 +148,7 @@ export function LabCanvas({
     onInventoryChange,
     onBotHit,
     onNearTargetChange,
+    onObjectiveChange,
   });
   propsRef.current = {
     level,
@@ -154,28 +162,27 @@ export function LabCanvas({
     onInventoryChange,
     onBotHit,
     onNearTargetChange,
+    onObjectiveChange,
   };
 
   useEffect(() => {
     externalDirRef.current = externalMoveDir ?? null;
+    if (externalMoveDir) simRef.current.targetWalkPos = null;
   }, [externalMoveDir]);
 
   useEffect(() => {
-    const updateSize = () => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      if (vw < 768) {
-        const aspect = vw / Math.max(1, vh);
-        const targetW = aspect < 1 ? 312 : 440;
-        const targetH = Math.min(WORLD_HEIGHT, Math.round(targetW / Math.max(0.55, aspect)));
-        setViewSize({ w: targetW, h: targetH });
-      } else {
-        setViewSize({ w: WORLD_WIDTH, h: WORLD_HEIGHT });
-      }
-    };
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    if (!arenaHost.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width < 1 || height < 1) return;
+      const aspect = width / height;
+      const maxWidth = width < 600 ? (aspect < 1 ? 312 : 440) : WORLD_WIDTH;
+      const h = Math.min(WORLD_HEIGHT, Math.round(maxWidth / aspect));
+      const w = Math.min(maxWidth, Math.round(h * aspect));
+      setViewSize((previous) => previous.w === w && previous.h === h ? previous : { w, h });
+    });
+    observer.observe(arenaHost.current);
+    return () => observer.disconnect();
   }, []);
 
   const syncInventoryHud = () => {
@@ -208,6 +215,7 @@ export function LabCanvas({
       maxHp: b.maxHp,
       hitFlash: 0,
       windupTimer: 0,
+      recoveryTimer: 0,
       dashTimer: 0,
       dashVx: 0,
       dashVy: 0,
@@ -243,6 +251,7 @@ export function LabCanvas({
       hitCooldown: 0,
       attackSwingTimer: 0,
       overdriveTimer: 0,
+      roomTime: 0,
       shakeTime: 0,
       hitstopTime: 0,
       pulseCooldown: 0,
@@ -579,6 +588,11 @@ export function LabCanvas({
   const damageBot = (bot: ActiveGlitchBot, amount: number, knockVx: number, knockVy: number) => {
     if (bot.destroyed) return;
     const s = simRef.current;
+    const exposed = bot.recoveryTimer > 0;
+    if (exposed) {
+      bot.recoveryTimer = 0;
+      amount += 1;
+    }
     bot.hp -= amount;
     bot.hitFlash = 0.25;
     s.hitstopTime = 0.04;
@@ -868,8 +882,10 @@ export function LabCanvas({
   }, []);
 
   useEffect(() => {
-    let rafId = 0;
-    let lastTime = performance.now();
+    if (!arenaHost.current) return;
+    let objective: ArenaObjective | null = null;
+    let nextObjectiveCheck = 0;
+    let lastObjectiveText = '';
     let lastReportedKey = '';
     let lastReportedOverdriveSec = 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -894,10 +910,8 @@ export function LabCanvas({
       spawnSparks(s.playerX, s.playerY, '#EF4444', 10);
     };
 
-    const tick = (now: number) => {
-      const rawDt = (now - lastTime) / 1000;
-      lastTime = now;
-      const dt = Math.min(rawDt, 0.05);
+    const tick = (scene: ArenaScene, now: number, delta: number) => {
+      const dt = Math.min(delta / 1000, 0.05);
       const timeSec = now / 1000;
 
       const {
@@ -912,6 +926,7 @@ export function LabCanvas({
       if (s.hitstopTime > 0) {
         s.hitstopTime = Math.max(0, s.hitstopTime - dt);
       } else if (active) {
+        s.roomTime += dt;
         s.hitFlash = Math.max(0, s.hitFlash - dt);
         s.hitCooldown = Math.max(0, s.hitCooldown - dt);
         s.attackSwingTimer = Math.max(0, s.attackSwingTimer - dt);
@@ -945,16 +960,18 @@ export function LabCanvas({
         if (keys.has('d') || keys.has('arrowright') || externalDirRef.current === 'right') vx += 1;
 
         if (vx === 0 && vy === 0 && s.targetWalkPos) {
-          const dx = s.targetWalkPos.x - s.playerX;
-          const dy = s.targetWalkPos.y - s.playerY;
-          const dist = Math.hypot(dx, dy);
-          if (dist < 0.25) {
-            const action = s.targetWalkPos.autoAction;
+          const walk = s.targetWalkPos;
+          let point = walk.path[walk.index];
+          while (point && Math.hypot(point.x - s.playerX, point.y - s.playerY) < 0.18) {
+            walk.index++;
+            point = walk.path[walk.index];
+          }
+          if (!point) {
             s.targetWalkPos = null;
-            if (action) action();
+            walk.autoAction?.();
           } else {
-            vx = dx / dist;
-            vy = dy / dist;
+            vx = point.x - s.playerX;
+            vy = point.y - s.playerY;
           }
         }
 
@@ -974,7 +991,10 @@ export function LabCanvas({
             s.dir = vy > 0 ? 'down' : 'up';
           }
 
-          const distance = dashing ? DASH_SPEED * Math.min(dt, s.dashRemaining) : PLAYER_SPEED * dt;
+          const speed = dashing ? DASH_SPEED : PLAYER_SPEED;
+          const distance = dashing
+            ? speed * Math.min(dt, s.dashRemaining)
+            : Math.min(speed * dt, s.targetWalkPos ? len : Infinity);
           const nextX = s.playerX + vx * distance;
           const nextY = s.playerY + vy * distance;
 
@@ -1008,6 +1028,18 @@ export function LabCanvas({
           }
         } else {
           s.isMoving = false;
+        }
+
+        for (const circuit of lvl.circuits ?? []) {
+          if (circuitPhase(s.roomTime, circuit.offset) !== 'live') continue;
+          if (
+            s.playerX >= circuit.tileX - 0.4 &&
+            s.playerX <= circuit.tileX + circuit.widthTiles - 0.6 &&
+            s.playerY >= circuit.tileY - 0.4 &&
+            s.playerY <= circuit.tileY + circuit.heightTiles - 0.6
+          ) {
+            applyPlayerHit();
+          }
         }
 
         // Auto-activate switches on step!
@@ -1111,35 +1143,37 @@ export function LabCanvas({
         for (const bot of s.bots) {
           if (bot.destroyed) continue;
           bot.hitFlash = Math.max(0, bot.hitFlash - dt);
+          bot.recoveryTimer = Math.max(0, bot.recoveryTimer - dt);
 
           const distToPlayer = Math.hypot(s.playerX - bot.x, s.playerY - bot.y);
 
           if (bot.kind === 'echo_bot') {
             if (bot.dashTimer > 0) {
               bot.dashTimer -= dt;
-              const nx = bot.x + bot.dashVx * 6.0 * dt;
-              const ny = bot.y + bot.dashVy * 6.0 * dt;
+              const nx = bot.x + bot.dashVx * 7.3 * dt;
+              const ny = bot.y + bot.dashVy * 7.3 * dt;
               if (!isBlocked(nx, ny, lvl)) {
                 bot.x = nx;
                 bot.y = ny;
               } else {
                 bot.dashTimer = 0;
               }
+              if (bot.dashTimer <= 0) bot.recoveryTimer = 0.72;
             } else if (bot.windupTimer > 0) {
               bot.windupTimer -= dt;
               if (bot.windupTimer <= 0) {
-                const d = Math.max(0.1, distToPlayer);
-                bot.dashVx = (s.playerX - bot.x) / d;
-                bot.dashVy = (s.playerY - bot.y) / d;
+                bot.dashVx = Math.cos(bot.aimAngle);
+                bot.dashVy = Math.sin(bot.aimAngle);
                 bot.dashTimer = 0.42;
               }
             } else if (distToPlayer < 4.2 && bot.shootCooldown <= 0) {
+              bot.aimAngle = Math.atan2(s.playerY - bot.y, s.playerX - bot.x);
               bot.windupTimer = 0.5;
               bot.shootCooldown = 3.2;
             } else {
               bot.shootCooldown = Math.max(0, bot.shootCooldown - dt);
               const cfg = lvl.bots.find((b) => b.id === bot.id);
-              if (cfg && cfg.waypoints.length > 0) {
+              if (bot.recoveryTimer === 0 && cfg && cfg.waypoints.length > 0) {
                 const wp = cfg.waypoints[bot.wpIndex % cfg.waypoints.length];
                 const dx = wp.x - bot.x;
                 const dy = wp.y - bot.y;
@@ -1153,7 +1187,7 @@ export function LabCanvas({
             }
           } else {
             const cfg = lvl.bots.find((b) => b.id === bot.id);
-            if (bot.windupTimer === 0 && cfg && cfg.waypoints.length > 0) {
+            if (bot.windupTimer === 0 && bot.recoveryTimer === 0 && cfg && cfg.waypoints.length > 0) {
               const wp = cfg.waypoints[bot.wpIndex % cfg.waypoints.length];
               const dx = wp.x - bot.x;
               const dy = wp.y - bot.y;
@@ -1170,6 +1204,7 @@ export function LabCanvas({
               if (bot.windupTimer > 0) {
                 bot.windupTimer = Math.max(0, bot.windupTimer - dt);
                 if (bot.windupTimer === 0) {
+                  bot.recoveryTimer = 0.65;
                   for (const offset of bot.shotAngles) {
                     const angle = bot.aimAngle + offset;
                     s.projectiles.push({
@@ -1264,63 +1299,87 @@ export function LabCanvas({
         );
       }
 
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          renderLabScene(
-            ctx,
-            {
-              level: lvl,
-              playerX: s.playerX,
-              playerY: s.playerY,
-              playerDir: s.dir,
-              walkPhase: s.walkPhase,
-              isMoving: s.isMoving,
-              playerHitFlash: s.hitFlash,
-              isDashing: s.dashRemaining > 0,
-              parryRemaining: s.parryRemaining,
-              attackSwingTimer: s.attackSwingTimer,
-              overdriveTimer: s.overdriveTimer,
-              pulseWave: s.pulseWave,
-              bots: s.bots,
-              openedChests: s.openedChests,
-              openedGates: s.openedGates,
-              activatedSwitches: s.activatedSwitches,
-              projectiles: s.projectiles,
-              pickups: s.pickups,
-              particles: s.particles,
-              popups: s.popups,
-              shakeOffset,
-              timeSec,
-              progress: prog,
-              nearestTarget: nearest,
-            },
-            s.camX,
-            s.camY
-          );
+      if (active && now >= nextObjectiveCheck) {
+        objective = chooseObjective(lvl, prog, s, (x, y) => isBlocked(x, y, lvl));
+        nextObjectiveCheck = now + 240;
+        const text = objective?.text ?? 'Consulta el mapa y busca la llave o el interruptor que abre el paso.';
+        if (text !== lastObjectiveText) {
+          lastObjectiveText = text;
+          propsRef.current.onObjectiveChange(text);
         }
       }
 
-      rafId = requestAnimationFrame(tick);
+      if (objective) {
+        const bot = s.bots.find((item) => item.id === objective?.id);
+        if (bot) objective = bot.destroyed ? null : { ...objective, x: bot.x, y: bot.y };
+      }
+
+      scene.present({
+        level: lvl,
+        playerX: s.playerX,
+        playerY: s.playerY,
+        playerDir: s.dir,
+        walkPhase: s.walkPhase,
+        isMoving: s.isMoving,
+        playerHitFlash: s.hitFlash,
+        isDashing: s.dashRemaining > 0,
+        parryRemaining: s.parryRemaining,
+        attackSwingTimer: s.attackSwingTimer,
+        overdriveTimer: s.overdriveTimer,
+        pulseWave: s.pulseWave,
+        bots: s.bots,
+        openedChests: s.openedChests,
+        openedGates: s.openedGates,
+        activatedSwitches: s.activatedSwitches,
+        projectiles: s.projectiles,
+        pickups: s.pickups,
+        particles: s.particles,
+        popups: s.popups,
+        shakeOffset,
+        timeSec,
+        roomTime: s.roomTime,
+        progress: prog,
+        nearestTarget: nearest,
+        objective: active ? objective : null,
+        path: active && s.targetWalkPos ? s.targetWalkPos.path.slice(s.targetWalkPos.index) : [],
+      }, s.camX, s.camY, vs);
     };
 
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    const game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: arenaHost.current,
+      width: viewSize.w,
+      height: viewSize.h,
+      backgroundColor: '#070d18',
+      scene: new ArenaScene(level, viewSize, tick, handleArenaTap),
+      pixelArt: true,
+      banner: false,
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      input: { keyboard: false, gamepad: false },
+      audio: { noAudio: true },
+      callbacks: {
+        postBoot: (instance) => {
+          instance.canvas.setAttribute('aria-label', `Tablero interactivo del ${level.title}`);
+          instance.canvas.className = 'pixel-canvas cursor-pointer';
+        },
+      },
+    });
+    return () => game.destroy(true);
   }, []);
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isActivePlay || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scale = Math.min(rect.width / viewSize.w, rect.height / viewSize.h);
-    if (scale <= 0) return;
-    const offsetX = (rect.width - viewSize.w * scale) / 2;
-    const offsetY = (rect.height - viewSize.h * scale) / 2;
-    const localX = (e.clientX - rect.left - offsetX) / scale;
-    const localY = (e.clientY - rect.top - offsetY) / scale;
-    if (localX < 0 || localX >= viewSize.w || localY < 0 || localY >= viewSize.h) return;
-    const worldPxX = simRef.current.camX + localX;
-    const worldPxY = simRef.current.camY + localY;
+  const walkTo = (x: number, y: number, autoAction?: () => void) => {
+    const s = simRef.current;
+    const { level } = propsRef.current;
+    const tiles = reachableTiles({ x: s.playerX, y: s.playerY }, (tx, ty) => isBlocked(tx, ty, level));
+    const target = autoAction
+      ? tiles.find((tile) => Math.hypot(tile.x - x, tile.y - y) <= 1.7)
+      : tiles.find((tile) => tile.x === Math.round(x) && tile.y === Math.round(y));
+    s.targetWalkPos = target ? { path: routeFrom(target), index: 0, autoAction } : null;
+  };
+
+  const handleArenaTap = (worldPxX: number, worldPxY: number) => {
+    const { isActivePlay, level, progress, onOpenTerminal, onReachExit } = propsRef.current;
+    if (!isActivePlay) return;
     const tileX = worldPxX / TILE_SIZE;
     const tileY = worldPxY / TILE_SIZE;
 
@@ -1339,11 +1398,7 @@ export function LabCanvas({
         if (distNow <= INTERACT_RADIUS + 0.3) {
           openChest(chest);
         } else {
-          simRef.current.targetWalkPos = {
-            x: chest.tileX,
-            y: chest.tileY + 1,
-            autoAction: () => openChest(chest),
-          };
+          walkTo(chest.tileX, chest.tileY, () => openChest(chest));
         }
         return;
       }
@@ -1365,11 +1420,7 @@ export function LabCanvas({
         if (Math.hypot(simRef.current.playerX - gx, simRef.current.playerY - gy) <= INTERACT_RADIUS + 0.4) {
           unlockGate(gate);
         } else {
-          simRef.current.targetWalkPos = {
-            x: gx,
-            y: gy,
-            autoAction: () => unlockGate(gate),
-          };
+          walkTo(gx, gy, () => unlockGate(gate));
         }
         return;
       }
@@ -1396,16 +1447,12 @@ export function LabCanvas({
             onOpenTerminal(t.scenarioId);
           }
         } else {
-          simRef.current.targetWalkPos = {
-            x: t.tileX,
-            y: t.tileY + 1.1,
-            autoAction: () => {
-              if (!isTerminalShielded(t.scenarioId)) {
-                retroAudio.playInteract();
-                onOpenTerminal(t.scenarioId);
-              }
-            },
-          };
+          walkTo(t.tileX, t.tileY, () => {
+            if (!isTerminalShielded(t.scenarioId)) {
+              retroAudio.playInteract();
+              onOpenTerminal(t.scenarioId);
+            }
+          });
         }
         return;
       }
@@ -1415,34 +1462,21 @@ export function LabCanvas({
       const solvedCount = level.terminals.filter((t) => progress.scenarios[t.scenarioId]?.solved).length;
       const allCleared = simRef.current.bots.every((b) => b.destroyed);
       if (solvedCount === 3 && allCleared) {
-        simRef.current.targetWalkPos = {
-          x: level.exitX - 0.8,
-          y: level.exitY,
-          autoAction: () => {
-            retroAudio.playInteract();
-            onReachExit();
-          },
-        };
+        walkTo(level.exitX, level.exitY, () => {
+          retroAudio.playInteract();
+          onReachExit();
+        });
       }
       return;
     }
 
-    simRef.current.targetWalkPos = {
-      x: Math.max(1.5, Math.min(GRID_COLS - 2.5, tileX)),
-      y: Math.max(2.3, Math.min(GRID_ROWS - 2.3, tileY)),
-    };
+    walkTo(Math.max(1, Math.min(GRID_COLS - 2, Math.floor(tileX))),
+      Math.max(2, Math.min(GRID_ROWS - 2, Math.floor(tileY))));
   };
 
   return (
-    <div className="w-full h-full flex items-center justify-center bg-[#0B0F17] select-none overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        width={viewSize.w}
-        height={viewSize.h}
-        onClick={handleCanvasClick}
-        aria-label={`Mazmorra heavy metal del ${level.title}`}
-        className="pixel-canvas w-full h-full md:max-w-[1440px] md:max-h-[864px] object-contain cursor-pointer"
-      />
+    <div className="arena-shell">
+      <div ref={arenaHost} className="arena-surface" />
     </div>
   );
 }

@@ -44,6 +44,7 @@ export default function App() {
     overdriveSeconds: 0,
     dashReady: true,
   });
+  const [objective, setObjective] = useState('');
   const [nearTarget, setNearTarget] = useState<{
     type: NearTargetInfo['type'];
     id: string;
@@ -77,6 +78,7 @@ export default function App() {
       setLabResetCounter((count) => count + 1);
       setTouchMoveDir(null);
       setNearTarget(null);
+      setObjective('');
       setScreen('PLAYING');
       setShowComicChapter(!seenChapters[lvlId]);
     },
@@ -209,6 +211,7 @@ export default function App() {
         onInventoryChange={setInventory}
         onBotHit={() => setStreak(0)}
         onNearTargetChange={setNearTarget}
+        onObjectiveChange={setObjective}
         externalMoveDir={touchMoveDir}
         triggerInteractSignal={interactSignal}
         triggerPulseSignal={pulseSignal}
@@ -234,6 +237,7 @@ export default function App() {
             inventory={inventory}
             streak={streak}
             nearTarget={nearTarget}
+            objective={objective}
             onToggleMute={handleToggleMute}
             onOpenComic={() => setShowComicChapter(true)}
             onOpenGuide={() => setShowBiasGuide(true)}

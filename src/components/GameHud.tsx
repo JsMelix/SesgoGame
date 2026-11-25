@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Crosshair,
   BookOpen,
   Box,
   Flame,
@@ -30,6 +31,7 @@ interface GameHudProps {
   enemiesRemaining: number;
   inventory: InventoryHudState;
   streak: number;
+  objective: string;
   nearTarget: {
     type: NearTargetInfo['type'];
     id: string;
@@ -57,6 +59,7 @@ export function GameHud({
   enemiesRemaining,
   inventory,
   streak,
+  objective,
   nearTarget,
   onToggleMute,
   onOpenComic,
@@ -197,6 +200,13 @@ export function GameHud({
           </button>
         </div>
       </div>
+
+      {!levelDone && objective && (
+        <div className="absolute left-2.5 right-2.5 top-[5.4rem] md:left-4 md:right-auto md:top-[5rem] flex items-center gap-2 max-w-md px-3 py-2 bg-[#071120]/95 border-l-2 border-cyan-300 text-xs text-cyan-50 shadow-lg">
+          <Crosshair className="shrink-0 text-cyan-300" size={16} />
+          <span>{objective}</span>
+        </div>
+      )}
 
       {/* Center-bottom objective banner (when all bots defeated & 3/3 solved) */}
       {levelDone && (

@@ -506,6 +506,10 @@ export const LAB_LEVELS: LabLevelConfig[] = [
     exitX: 22,
     exitY: 11,
     ambientQuote: 'Quien diseña puertas, llaves y etiquetas decide qué partes del mundo existen.',
+    circuits: [
+      { tileX: 8, tileY: 6, widthTiles: 3, heightTiles: 1, offset: 0 },
+      { tileX: 19, tileY: 10, widthTiles: 2, heightTiles: 1, offset: 1.4 },
+    ],
     walls: [
       { tileX: 7, tileY: 2, widthTiles: 1, heightTiles: 4 },
       { tileX: 7, tileY: 8, widthTiles: 1, heightTiles: 6 },

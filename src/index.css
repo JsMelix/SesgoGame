@@ -273,3 +273,34 @@
   .field-dialogue { font-size: 0.9rem; }
   .field-actions { font-size: 0.85rem; }
 }
+
+.arena-shell {
+  position: absolute;
+  inset: 7.65rem 0.625rem 10.5rem;
+  padding: 0.25rem;
+  overflow: hidden;
+  background: #080f1d;
+  border: 1px solid #374962;
+  box-shadow: inset 0 0 0 2px #101e30, 0 0 26px #050a16;
+}
+
+.arena-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin-inline: auto;
+  max-width: 1536px;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .arena-shell {
+    inset: 7.4rem 1rem 3.5rem;
+    margin-inline: auto;
+    max-width: 1536px;
+  }
+}
+
+@media (max-width: 767px) and (orientation: landscape) {
+  .arena-shell { inset: 6.8rem 0.625rem 6rem; }
+}

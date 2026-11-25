@@ -133,6 +133,7 @@ export interface LabLevelConfig {
   exitX: number;
   exitY: number;
   walls: WallBlock[];
+  circuits?: Array<WallBlock & { offset: number }>;
   gates: GateConfig[];
   chests: ChestConfig[];
   switches: SwitchConfig[];
