@@ -1,0 +1,6 @@
+{
+  "name": "CRITERIO 16-BIT",
+  "description": "Videojuego educativo pixel-art sobre sesgos en la Inteligencia Artificial y pensamiento crítico en 5 niveles progresivos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

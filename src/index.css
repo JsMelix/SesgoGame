@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --metal-bg: #0b0f17;
+    --metal-surface: #131a26;
+    --metal-surface-alt: #1b2434;
+    --metal-ink: #f8fafc;
+    --metal-muted: #94a3b8;
+    --metal-border: #334155;
+    --metal-rivet: #64748b;
+    --metal-amber: #f59e0b;
+    --metal-crimson: #ef4444;
+    --metal-emerald: #10b981;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    background-color: var(--metal-bg);
+    color: var(--metal-ink);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.font-pixel {
+  font-family: 'Silkscreen', monospace;
+}
+
+.font-mono-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.pixel-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.metal-frame {
+  background-color: var(--metal-surface);
+  border: 2px solid #475569;
+  box-shadow: 0 0 0 2px #05070b, 4px 4px 0px #05070b;
+}
+
+.metal-frame-sm {
+  background-color: var(--metal-surface);
+  border: 2px solid #475569;
+  box-shadow: 0 0 0 1px #05070b, 2px 2px 0px #05070b;
+}
+
+.metal-btn {
+  border: 2px solid #475569;
+  box-shadow: 0 0 0 1px #05070b, 3px 3px 0px #05070b;
+  transition: transform 110ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 110ms cubic-bezier(0.16, 1, 0.3, 1), background-color 110ms ease;
+}
+
+.metal-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 0 0 0 1px #05070b, 4px 4px 0px #05070b;
+}
+
+.metal-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 1px #05070b, 1px 1px 0px #05070b;
+}
+
+.metal-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.pt-safe {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.comic-halftone {
+  background-image: radial-gradient(rgba(245, 158, 11, 0.14) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.comic-panel {
+  border: 3px solid #05070b;
+  box-shadow: 5px 5px 0px #05070b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
