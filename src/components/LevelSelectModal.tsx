@@ -31,7 +31,7 @@ export function LevelSelectModal({
               Mapa de campaña
             </h2>
             <p className="text-xs text-[#94A3B8] mt-0.5">
-              Resuelve los tres casos y cierra la decisión del capítulo para avanzar.
+              Completa la prueba de campo y los tres casos. Toma la decisión en el portal.
             </p>
           </div>
 

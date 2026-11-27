@@ -1,5 +1,6 @@
 import { LabLevelConfig, PlayerProgress, KeyColor } from '../types/game';
 import type { ActiveGlitchBot, FloorPickup } from '../components/pixelRenderer';
+import { canLeaveRoom, fieldRecord, fieldSites, gateIsOpen } from './fieldwork';
 import { reachableTiles } from './arenaGrid';
 
 export interface ArenaObjective {
@@ -46,11 +47,19 @@ export function chooseObjective(
 
   const bots = state.bots.filter((bot) => !bot.destroyed);
   const pending = level.terminals.filter((terminal) => !progress.scenarios[terminal.scenarioId]?.solved);
-  if (pending.length === 0 && bots.length === 0) {
+  if (canLeaveRoom(level, progress, bots.length)) {
     return { id: 'exit', x: level.exitX, y: level.exitY, color: colors.exit, text: 'Entra al portal y toma la decisión del capítulo.' };
   }
 
-  const gates = level.gates.filter((gate) => !state.openedGates[gate.id]);
+  const field = fieldRecord(progress, level.id);
+  const gates = level.gates.filter((gate) => !gateIsOpen(gate, state.openedGates, field.applied));
+  const investigation = field.applied ? null : pick(fieldSites(level.id)
+    .filter((site) => site.id === 'console' ? field.sources.length === 2 : !field.sources.includes(site.id))
+    .map((site) => ({
+      id: site.id,
+      x: site.x, y: site.y, color: 0xc4b5fd,
+      text: site.id === 'console' ? `Pon a prueba la regla en ${site.title}.` : `Recupera la fuente ${site.id}: ${site.title}.`,
+    })), 1.7);
   const keyNeeded = (key?: KeyColor) => key && gates.some((gate) => gate.keyColor === key) && state.keys[key] === 0;
   const terminal = pick(pending
     .filter((node) => !bots.some((bot) => bot.linkedScenarioId === node.scenarioId))
@@ -88,5 +97,5 @@ export function chooseObjective(
     })),
   ], 2.2);
 
-  return terminal ?? guard ?? route;
+  return investigation ?? terminal ?? guard ?? route;
 }

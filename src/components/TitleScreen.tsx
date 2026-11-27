@@ -49,7 +49,7 @@ export function TitleScreen({ hasProgress, onStartPlay, onOpenLevels }: TitleScr
       {/* Top quiet metadata */}
       <div className="relative z-10 w-full max-w-4xl flex items-center justify-between gap-3 pt-safe">
         <p className="text-xs md:text-sm font-medium text-[#CBD5E1]">
-          5 capítulos · 15 casos de auditoría
+          5 capítulos · 5 pruebas de campo · 15 casos
         </p>
         <PWAInstallButton />
       </div>

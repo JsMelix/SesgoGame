@@ -91,6 +91,7 @@ export interface GateConfig {
   keyColor?: KeyColor;
   keyLabel?: string;
   requiresSwitchId?: string;
+  requiresFieldTest?: true;
 }
 
 export interface ChestConfig {
@@ -110,7 +111,7 @@ export interface SwitchConfig {
 }
 
 export interface FurnitureItem {
-  kind: 'desk' | 'rack' | 'plant' | 'bookshelf' | 'whiteboard' | 'table' | 'amp' | 'tesla' | 'poster';
+  kind: 'cover' | 'desk' | 'rack' | 'plant' | 'bookshelf' | 'whiteboard' | 'table' | 'amp' | 'tesla' | 'poster';
   tileX: number;
   tileY: number;
   widthTiles: number;
@@ -152,6 +153,7 @@ export interface ScenarioProgress {
 export interface PlayerProgress {
   unlockedLevel: number;
   completedChapters: number[];
+  fieldwork: Record<number, { sources: Array<'A' | 'B'>; applied: boolean }>;
   scenarios: Record<string, ScenarioProgress>;
   soundMuted: boolean;
 }

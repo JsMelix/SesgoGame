@@ -5,6 +5,7 @@ const STORAGE_KEY = 'criterio_16bit_progress_v1';
 export const DEFAULT_PROGRESS: PlayerProgress = {
   unlockedLevel: 1,
   completedChapters: [],
+  fieldwork: {},
   scenarios: {},
   soundMuted: false,
 };
@@ -17,12 +18,19 @@ export function loadProgress(): PlayerProgress {
     const parsed = JSON.parse(raw) as Partial<PlayerProgress>;
     return {
       unlockedLevel:
-        typeof parsed.unlockedLevel === 'number' && parsed.unlockedLevel >= 1 && parsed.unlockedLevel <= 5
+        typeof parsed.unlockedLevel === 'number' && Number.isInteger(parsed.unlockedLevel) && parsed.unlockedLevel >= 1 && parsed.unlockedLevel <= 5
           ? parsed.unlockedLevel
           : 1,
       completedChapters: Array.isArray(parsed.completedChapters)
         ? [...new Set(parsed.completedChapters.filter((id) => Number.isInteger(id) && id >= 1 && id <= 5))]
         : [],
+      fieldwork: Object.fromEntries(
+        Object.entries(parsed.fieldwork ?? {}).flatMap(([id, entry]) => {
+          if (!/^[1-5]$/.test(id) || !entry || !Array.isArray(entry.sources)) return [];
+          const sources = [...new Set(entry.sources.filter((source) => source === 'A' || source === 'B'))];
+          return [[id, { sources, applied: sources.length === 2 && entry.applied === true }]];
+        }),
+      ),
       scenarios: parsed.scenarios && typeof parsed.scenarios === 'object' ? parsed.scenarios : {},
       soundMuted: Boolean(parsed.soundMuted),
     };
@@ -48,5 +56,5 @@ export function clearProgress(): PlayerProgress {
       // Ignore
     }
   }
-  return { ...DEFAULT_PROGRESS, scenarios: {} };
+  return { ...DEFAULT_PROGRESS, scenarios: {}, fieldwork: {} };
 }

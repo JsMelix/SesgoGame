@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { blocksMovement, blocksShot, clearDistance } from '../game/arenaGeometry';
+import type { FieldSiteId } from './FieldTestModal';
+import { canLeaveRoom, fieldRecord, fieldSites, gateIsOpen } from '../game/fieldwork';
 import { ArenaTile, reachableTiles, routeFrom } from '../game/arenaGrid';
 import { circuitPhase } from '../game/hazards';
 import { ArenaScene } from '../game/ArenaScene';
@@ -47,6 +50,7 @@ interface LabCanvasProps {
   progress: PlayerProgress;
   isActivePlay: boolean;
   onOpenTerminal: (scenarioId: string) => void;
+  onOpenFieldSite: (siteId: FieldSiteId) => void;
   onReachExit: () => void;
   onPlayerHpChange: (hp: number, maxHp: number) => void;
   onEnemiesRemainingChange: (count: number) => void;
@@ -79,6 +83,7 @@ export function LabCanvas({
   progress,
   isActivePlay,
   onOpenTerminal,
+  onOpenFieldSite,
   onReachExit,
   onPlayerHpChange,
   onEnemiesRemainingChange,
@@ -94,6 +99,8 @@ export function LabCanvas({
   const arenaHost = useRef<HTMLDivElement>(null);
   const heldKeysRef = useRef<Set<string>>(new Set());
   const lastDashSignal = useRef(triggerDashSignal);
+  const lastInteractSignal = useRef(triggerInteractSignal);
+  const lastPulseSignal = useRef(triggerPulseSignal);
   const externalDirRef = useRef<Direction | null>(null);
 
   const [viewSize, setViewSize] = useState<{ w: number; h: number }>({
@@ -142,6 +149,7 @@ export function LabCanvas({
     isActivePlay,
     viewSize,
     onOpenTerminal,
+    onOpenFieldSite,
     onReachExit,
     onPlayerHpChange,
     onEnemiesRemainingChange,
@@ -156,6 +164,7 @@ export function LabCanvas({
     isActivePlay,
     viewSize,
     onOpenTerminal,
+    onOpenFieldSite,
     onReachExit,
     onPlayerHpChange,
     onEnemiesRemainingChange,
@@ -295,52 +304,18 @@ export function LabCanvas({
     }
   }, [isActivePlay]);
 
-  const isWallOrGateBlocked = (nx: number, ny: number, lvl: LabLevelConfig): boolean => {
-    if (nx < 1.1 || nx > GRID_COLS - 2.1 || ny < 2.0 || ny > GRID_ROWS - 2.1) {
-      return true;
-    }
-    for (const w of lvl.walls) {
-      if (
-        nx > w.tileX - 0.65 &&
-        nx < w.tileX + w.widthTiles - 0.35 &&
-        ny > w.tileY - 0.65 &&
-        ny < w.tileY + w.heightTiles - 0.35
-      ) {
-        return true;
-      }
-    }
-    for (const g of lvl.gates) {
-      if (simRef.current.openedGates[g.id]) continue;
-      if (
-        nx > g.tileX - 0.65 &&
-        nx < g.tileX + g.widthTiles - 0.35 &&
-        ny > g.tileY - 0.65 &&
-        ny < g.tileY + g.heightTiles - 0.35
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
+  const gateState = (levelId: number) => ({
+    openedGates: simRef.current.openedGates,
+    fieldApplied: fieldRecord(propsRef.current.progress, levelId).applied,
+  });
 
-  const isBlocked = (nx: number, ny: number, lvl: LabLevelConfig): boolean => {
-    if (isWallOrGateBlocked(nx, ny, lvl)) return true;
+  const isBlocked = (x: number, y: number, level: LabLevelConfig) =>
+    blocksMovement(level, gateState(level.id), x, y);
 
-    for (const f of lvl.furniture) {
-      const fx1 = f.tileX - 0.55;
-      const fy1 = f.tileY - 0.55;
-      const fx2 = f.tileX + f.widthTiles - 0.45;
-      const fy2 = f.tileY + f.heightTiles - 0.45;
-      if (nx > fx1 && nx < fx2 && ny > fy1 && ny < fy2) return true;
-    }
-    for (const c of lvl.chests) {
-      if (Math.abs(nx - c.tileX) < 0.65 && Math.abs(ny - c.tileY) < 0.65) return true;
-    }
-    for (const t of lvl.terminals) {
-      if (Math.abs(nx - t.tileX) < 0.72 && Math.abs(ny - t.tileY) < 0.72) return true;
-      if (Math.abs(nx - t.npcTileX) < 0.65 && Math.abs(ny - t.npcTileY) < 0.65) return true;
-    }
-    return false;
+  const canAimAt = (level: LabLevelConfig, x: number, y: number, tx: number, ty: number) => {
+    const distance = Math.hypot(tx - x, ty - y);
+    const angle = Math.atan2(ty - y, tx - x);
+    return clearDistance(level, gateState(level.id), x, y, angle, distance) === distance;
   };
 
   const isTerminalShielded = (scenarioId: string): boolean => {
@@ -443,7 +418,11 @@ export function LabCanvas({
 
   const unlockGate = (gate: GateConfig) => {
     const s = simRef.current;
-    if (s.openedGates[gate.id]) return;
+    if (gateIsOpen(gate, s.openedGates, fieldRecord(propsRef.current.progress, propsRef.current.level.id).applied)) return;
+    if (gate.requiresFieldTest) {
+      retroAudio.playError();
+      return;
+    }
     if (gate.requiresSwitchId) {
       retroAudio.playError();
       s.popups.push({
@@ -484,6 +463,7 @@ export function LabCanvas({
 
   const findNearestTarget = (px: number, py: number, lvl: LabLevelConfig): NearTargetInfo | null => {
     const s = simRef.current;
+    const record = fieldRecord(propsRef.current.progress, lvl.id);
     let best: (NearTargetInfo & { dist: number }) | null = null;
 
     for (const chest of lvl.chests) {
@@ -517,13 +497,15 @@ export function LabCanvas({
     }
 
     for (const gate of lvl.gates) {
-      if (s.openedGates[gate.id]) continue;
+      if (gateIsOpen(gate, s.openedGates, record.applied)) continue;
       const gx = gate.tileX + (gate.widthTiles - 1) * 0.5;
       const gy = gate.tileY + (gate.heightTiles - 1) * 0.5;
       const d = Math.hypot(px - gx, py - gy);
       if (d <= INTERACT_RADIUS + 0.3 && (!best || d < best.dist)) {
         let lockedReason: string | undefined;
-        if (gate.requiresSwitchId) {
+        if (gate.requiresFieldTest) {
+          lockedReason = 'Aplica la corrección de campo';
+        } else if (gate.requiresSwitchId) {
           lockedReason = 'Requiere Interruptor';
         } else if (gate.keyColor && s.keys[gate.keyColor] <= 0) {
           lockedReason = `Falta ${gate.keyLabel ?? 'Llave'}`;
@@ -533,7 +515,7 @@ export function LabCanvas({
           id: gate.id,
           tileX: gx,
           tileY: gy,
-          label: gate.keyLabel ?? 'Compuerta',
+          label: gate.requiresFieldTest ? 'Ruta de revisión' : gate.keyLabel ?? 'Compuerta',
           lockedReason,
           dist: d,
         };
@@ -568,6 +550,13 @@ export function LabCanvas({
       }
     }
 
+    for (const site of fieldSites(lvl.id)) {
+      const dist = Math.hypot(px - site.x, py - site.y);
+      if (dist <= INTERACT_RADIUS && (!best || dist < best.dist)) {
+        best = { type: 'field', id: site.id, tileX: site.x, tileY: site.y, label: site.title, dist };
+      }
+    }
+
     const dExit = Math.hypot(px - lvl.exitX, py - lvl.exitY);
     if (dExit <= INTERACT_RADIUS && (!best || dExit < best.dist)) {
       best = {
@@ -575,7 +564,10 @@ export function LabCanvas({
         id: 'exit',
         tileX: lvl.exitX,
         tileY: lvl.exitY,
-        label: 'Portal de Avance',
+        label: 'Portal',
+        lockedReason: canLeaveRoom(lvl, propsRef.current.progress, s.bots.filter((bot) => !bot.destroyed).length)
+          ? undefined
+          : 'Faltan la prueba, casos o guardias',
         dist: dExit,
       };
     }
@@ -675,6 +667,7 @@ export function LabCanvas({
   const fireGuitarAttack = (targetX?: number, targetY?: number) => {
     const s = simRef.current;
     if (s.pulseCooldown > 0) return;
+    const { level } = propsRef.current;
     const isOverdrive = s.overdriveTimer > 0;
     s.pulseCooldown = isOverdrive ? 0.24 : 0.38;
     s.attackSwingTimer = 0.22;
@@ -696,7 +689,7 @@ export function LabCanvas({
       for (const bot of s.bots) {
         if (bot.destroyed) continue;
         const d = Math.hypot(bot.x - s.playerX, bot.y - s.playerY);
-        if (d < closestDist) {
+        if (d < closestDist && canAimAt(level, s.playerX, s.playerY, bot.x, bot.y)) {
           closestDist = d;
           aimVx = (bot.x - s.playerX) / Math.max(0.1, d);
           aimVy = (bot.y - s.playerY) / Math.max(0.1, d);
@@ -735,7 +728,7 @@ export function LabCanvas({
     for (const bot of s.bots) {
       if (bot.destroyed) continue;
       const d = Math.hypot(bot.x - s.playerX, bot.y - s.playerY);
-      if (d <= 2.3) {
+      if (d <= 2.3 && canAimAt(level, s.playerX, s.playerY, bot.x, bot.y)) {
         const kx = (bot.x - s.playerX) / Math.max(0.2, d);
         const ky = (bot.y - s.playerY) / Math.max(0.2, d);
         damageBot(bot, dmg, kx, ky);
@@ -762,7 +755,7 @@ export function LabCanvas({
   };
 
   const triggerInteraction = () => {
-    const { level: lvl, progress: prog, onOpenTerminal: openTerm, onReachExit: reachExit } =
+    const { level: lvl, progress: prog, onOpenTerminal: openTerm, onOpenFieldSite, onReachExit: reachExit } =
       propsRef.current;
     const s = simRef.current;
     const target = findNearestTarget(s.playerX, s.playerY, lvl);
@@ -786,6 +779,13 @@ export function LabCanvas({
       return;
     }
 
+    if (target.type === 'field') {
+      retroAudio.playInteract();
+      const site = fieldSites(lvl.id).find((item) => item.id === target.id);
+      if (site) onOpenFieldSite(site.id);
+      return;
+    }
+
     if (target.type === 'terminal' || target.type === 'npc') {
       if (target.shielded) {
         retroAudio.playError();
@@ -801,9 +801,7 @@ export function LabCanvas({
       retroAudio.playInteract();
       openTerm(target.id);
     } else if (target.type === 'exit') {
-      const solvedCount = lvl.terminals.filter((t) => prog.scenarios[t.scenarioId]?.solved).length;
-      const allCleared = s.bots.every((b) => b.destroyed);
-      if (solvedCount === 3 && allCleared) {
+      if (canLeaveRoom(lvl, prog, s.bots.filter((bot) => !bot.destroyed).length)) {
         retroAudio.playInteract();
         reachExit();
       } else {
@@ -813,14 +811,16 @@ export function LabCanvas({
   };
 
   useEffect(() => {
-    if (triggerInteractSignal && triggerInteractSignal > 0 && isActivePlay) {
-      triggerInteraction();
+    if (triggerInteractSignal !== lastInteractSignal.current) {
+      lastInteractSignal.current = triggerInteractSignal;
+      if (isActivePlay) triggerInteraction();
     }
   }, [triggerInteractSignal]);
 
   useEffect(() => {
-    if (triggerPulseSignal && triggerPulseSignal > 0 && isActivePlay) {
-      fireGuitarAttack();
+    if (triggerPulseSignal !== lastPulseSignal.current) {
+      lastPulseSignal.current = triggerPulseSignal;
+      if (isActivePlay) fireGuitarAttack();
     }
   }, [triggerPulseSignal]);
 
@@ -1090,7 +1090,7 @@ export function LabCanvas({
           p.y += p.vy * dt;
           p.life -= dt;
 
-          let remove = p.life <= 0 || isWallOrGateBlocked(p.x, p.y, lvl);
+          let remove = p.life <= 0 || blocksShot(lvl, gateState(lvl.id), p.x, p.y);
 
           if (!remove && p.fromPlayer) {
             // Guitar bolts can also trigger Sonic Switches!
@@ -1166,7 +1166,7 @@ export function LabCanvas({
                 bot.dashVy = Math.sin(bot.aimAngle);
                 bot.dashTimer = 0.42;
               }
-            } else if (distToPlayer < 4.2 && bot.shootCooldown <= 0) {
+            } else if (distToPlayer < 4.2 && bot.shootCooldown <= 0 && canAimAt(lvl, bot.x, bot.y, s.playerX, s.playerY)) {
               bot.aimAngle = Math.atan2(s.playerY - bot.y, s.playerX - bot.x);
               bot.windupTimer = 0.5;
               bot.shootCooldown = 3.2;
@@ -1217,7 +1217,7 @@ export function LabCanvas({
                     });
                   }
                 }
-              } else if (bot.shootCooldown === 0 && distToPlayer < (bot.isBoss ? 9 : 7.2)) {
+              } else if (bot.shootCooldown === 0 && distToPlayer < (bot.isBoss ? 9 : 7.2) && canAimAt(lvl, bot.x, bot.y, s.playerX, s.playerY)) {
                 bot.aimAngle = Math.atan2(s.playerY - bot.y, s.playerX - bot.x);
                 bot.shotAngles = sentinelSpread(bot.isBoss, bot.hp, bot.maxHp);
                 bot.windupTimer = bot.isBoss ? 0.75 : 0.55;
@@ -1378,10 +1378,22 @@ export function LabCanvas({
   };
 
   const handleArenaTap = (worldPxX: number, worldPxY: number) => {
-    const { isActivePlay, level, progress, onOpenTerminal, onReachExit } = propsRef.current;
+    const { isActivePlay, level, progress, onOpenTerminal, onOpenFieldSite, onReachExit } = propsRef.current;
     if (!isActivePlay) return;
     const tileX = worldPxX / TILE_SIZE;
     const tileY = worldPxY / TILE_SIZE;
+
+    for (const site of fieldSites(level.id)) {
+      // The rendered center of an object is half a tile past its simulation anchor.
+      if (Math.hypot(tileX - site.x - 0.5, tileY - site.y - 0.5) > 0.75) continue;
+      const open = () => {
+        retroAudio.playInteract();
+        onOpenFieldSite(site.id);
+      };
+      if (Math.hypot(simRef.current.playerX - site.x, simRef.current.playerY - site.y) <= 1.7) open();
+      else walkTo(site.x, site.y, open);
+      return;
+    }
 
     for (const bot of simRef.current.bots) {
       if (bot.destroyed) continue;
@@ -1413,7 +1425,7 @@ export function LabCanvas({
     }
 
     for (const gate of level.gates) {
-      if (simRef.current.openedGates[gate.id]) continue;
+      if (gateIsOpen(gate, simRef.current.openedGates, fieldRecord(progress, level.id).applied)) continue;
       const gx = gate.tileX + (gate.widthTiles - 1) * 0.5;
       const gy = gate.tileY + (gate.heightTiles - 1) * 0.5;
       if (Math.hypot(tileX - gx, tileY - gy) < 1.45) {
@@ -1459,9 +1471,7 @@ export function LabCanvas({
     }
 
     if (Math.hypot(tileX - level.exitX, tileY - level.exitY) < 1.4) {
-      const solvedCount = level.terminals.filter((t) => progress.scenarios[t.scenarioId]?.solved).length;
-      const allCleared = simRef.current.bots.every((b) => b.destroyed);
-      if (solvedCount === 3 && allCleared) {
+      if (canLeaveRoom(level, progress, simRef.current.bots.filter((bot) => !bot.destroyed).length)) {
         walkTo(level.exitX, level.exitY, () => {
           retroAudio.playInteract();
           onReachExit();

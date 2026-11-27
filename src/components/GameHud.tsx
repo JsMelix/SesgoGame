@@ -18,6 +18,7 @@ import {
   VolumeX,
   Zap,
 } from 'lucide-react';
+import { fieldRecord } from '../game/fieldwork';
 import { Direction, LabLevelConfig, PlayerProgress } from '../types/game';
 import { retroAudio } from '../utils/audio';
 import { InventoryHudState } from './LabCanvas';
@@ -48,7 +49,6 @@ interface GameHudProps {
   onTouchInteract: () => void;
   onTouchPulse: () => void;
   onTouchDash: () => void;
-  onAdvanceLevel: () => void;
 }
 
 export function GameHud({
@@ -70,10 +70,9 @@ export function GameHud({
   onTouchInteract,
   onTouchPulse,
   onTouchDash,
-  onAdvanceLevel,
 }: GameHudProps) {
   const solvedCount = level.terminals.filter((t) => progress.scenarios[t.scenarioId]?.solved).length;
-  const levelDone = solvedCount === 3 && enemiesRemaining === 0;
+  const field = fieldRecord(progress, level.id);
   const totalKeys = inventory.keys.gold + inventory.keys.crimson + inventory.keys.cyan;
   const canInteract = Boolean(nearTarget && !nearTarget.shielded && !nearTarget.lockedReason);
 
@@ -201,29 +200,11 @@ export function GameHud({
         </div>
       </div>
 
-      {!levelDone && objective && (
+      {objective && (
         <div className="absolute left-2.5 right-2.5 top-[5.4rem] md:left-4 md:right-auto md:top-[5rem] flex items-center gap-2 max-w-md px-3 py-2 bg-[#071120]/95 border-l-2 border-cyan-300 text-xs text-cyan-50 shadow-lg">
           <Crosshair className="shrink-0 text-cyan-300" size={16} />
           <span>{objective}</span>
-        </div>
-      )}
-
-      {/* Center-bottom objective banner (when all bots defeated & 3/3 solved) */}
-      {levelDone && (
-        <div className="pointer-events-auto self-center metal-frame-sm px-3.5 py-2 bg-[#064E3B] flex items-center gap-3 max-w-md">
-          <span className="text-xs font-semibold text-[#ECFDF5]">
-            Ya tienes las pruebas. Decide qué hacer con ellas.
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              retroAudio.playInteract();
-              onAdvanceLevel();
-            }}
-            className="metal-btn px-3 py-2 bg-[#10B981] text-[#052E16] font-pixel text-xs whitespace-nowrap shrink-0 cursor-pointer min-h-[44px]"
-          >
-            Tomar decisión
-          </button>
+          <span className="ml-auto shrink-0 font-mono text-cyan-200" aria-label="Fuentes recuperadas">{field.applied ? 'Prueba ✓' : `Fuentes ${field.sources.length}/2`}</span>
         </div>
       )}
 
@@ -246,7 +227,7 @@ export function GameHud({
                 className="metal-btn px-4 py-2.5 bg-[#F59E0B] text-[#0B0F17] text-xs font-pixel flex items-center gap-2 whitespace-nowrap cursor-pointer"
               >
                 <span>
-                  [E] {nearTarget.type === 'switch' ? 'Activar' : 'Abrir'} {nearTarget.label}
+                  [E] {nearTarget.type === 'switch' ? 'Activar' : nearTarget.type === 'field' ? 'Examinar' : 'Abrir'} {nearTarget.label}
                 </span>
               </button>
             )

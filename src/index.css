@@ -304,3 +304,24 @@
 @media (max-width: 767px) and (orientation: landscape) {
   .arena-shell { inset: 6.8rem 0.625rem 6rem; }
 }
+
+.experiment { width: min(46rem, 100%); }
+.experiment-body { display: grid; gap: 1rem; padding: clamp(0.9rem, 3vw, 1.75rem); }
+.experiment-body > .field-button { justify-self: start; }
+.experiment-claim { padding: 0.75rem; color: #49162f; background: #f5dfec; border-left: 4px solid #a13a68; }
+.experiment-claim strong { display: block; font: 800 0.7rem/1.5 'JetBrains Mono', monospace; }
+.experiment-sources { display: grid; gap: 0.45rem; }
+.experiment-sources details { border: 1px solid #b8a2cc; background: #eee3f6; }
+.experiment-sources summary { padding: 0.6rem 0.75rem; cursor: pointer; font-size: 0.88rem; font-weight: 750; }
+.experiment-sources details p { padding: 0 0.75rem 0.75rem; font-size: 0.9rem; }
+.experiment-options { display: grid; gap: 0.45rem; padding: 0; border: 0; }
+.experiment-options legend { margin-bottom: 0.6rem; font-weight: 800; }
+.experiment-options label { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.75rem; min-height: 44px; background: #fffaf2; border: 1px solid #695b78; cursor: pointer; }
+.experiment-options label:has(:checked) { background: #e9def9; border-color: #5f3d83; box-shadow: inset 3px 0 #5f3d83; }
+.experiment-options input { appearance: auto; accent-color: #573580; }
+.experiment-results { border: 2px solid #302344; background: #fffbf6; padding: 0.75rem; }
+.experiment-results table { width: 100%; border-collapse: collapse; margin: 0.55rem 0; font-size: 0.86rem; }
+.experiment-results th, .experiment-results td { padding: 0.5rem; border-bottom: 1px solid #d4c1db; }
+.experiment-results thead { background: #332549; color: #fffafa; }
+.experiment-results th:first-child { text-align: left; }
+.experiment-results td { text-align: center; font-weight: 800; }

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { BiasGuideModal } from './components/BiasGuideModal';
 import { ChapterDecisionModal } from './components/ChapterDecisionModal';
 import { ComicCutsceneModal } from './components/ComicCutsceneModal';
+import { FieldSiteId, FieldTestModal } from './components/FieldTestModal';
+import { fieldRecord } from './game/fieldwork';
 import { GameHud } from './components/GameHud';
 import { InventoryHudState, LabCanvas } from './components/LabCanvas';
 import { LevelCompleteModal } from './components/LevelCompleteModal';
@@ -29,6 +31,7 @@ export default function App() {
   const [screen, setScreen] = useState<GameScreen>('TITLE_MENU');
   const [currentLevelId, setCurrentLevelId] = useState<number>(() => progress.unlockedLevel);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [activeFieldSite, setActiveFieldSite] = useState<FieldSiteId | null>(null);
   const [showComicChapter, setShowComicChapter] = useState<boolean>(false);
   const [seenChapters, setSeenChapters] = useState<Record<number, boolean>>({});
   const [showLevelSelect, setShowLevelSelect] = useState<boolean>(false);
@@ -61,7 +64,7 @@ export default function App() {
   const currentLevel = getLabLevel(currentLevelId);
   const currentChapter = getChapterStory(currentLevelId);
   const activeScenario = activeScenarioId ? getScenarioById(activeScenarioId) : undefined;
-  const hasAnyProgress = Object.keys(progress.scenarios).length > 0;
+  const hasAnyProgress = Object.keys(progress.scenarios).length > 0 || Object.values(progress.fieldwork).some((record) => record.sources.length > 0);
   const isPlayerDefeated = screen === 'PLAYING' && playerHp <= 0;
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export default function App() {
     (lvlId: number) => {
       setCurrentLevelId(lvlId);
       setActiveScenarioId(null);
+      setActiveFieldSite(null);
       setShowLevelSelect(false);
       setShowBiasGuide(false);
       setPlayerHp(5);
@@ -88,7 +92,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (activeScenarioId || showComicChapter || isPlayerDefeated) return;
+      if (activeScenarioId || activeFieldSite || showComicChapter || isPlayerDefeated) return;
       if (showBiasGuide) {
         setShowBiasGuide(false);
         return;
@@ -107,7 +111,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [screen, activeScenarioId, showComicChapter, isPlayerDefeated, showBiasGuide, showLevelSelect]);
+  }, [screen, activeScenarioId, activeFieldSite, showComicChapter, isPlayerDefeated, showBiasGuide, showLevelSelect]);
 
   const handleToggleMute = useCallback(() => {
     setProgress((prev) => {
@@ -147,6 +151,25 @@ export default function App() {
     []
   );
 
+  const handleCollectEvidence = (source: 'A' | 'B') => {
+    setProgress((previous) => {
+      const record = fieldRecord(previous, currentLevelId);
+      if (record.sources.includes(source)) return previous;
+      const updated = { ...record, sources: [...record.sources, source] };
+      return { ...previous, fieldwork: { ...previous.fieldwork, [currentLevelId]: updated } };
+    });
+    setActiveFieldSite(null);
+  };
+
+  const handleApplyFieldTest = () => {
+    retroAudio.playGateUnlock();
+    setProgress((previous) => {
+      const record = fieldRecord(previous, currentLevelId);
+      if (record.applied || record.sources.length !== 2) return previous;
+      return { ...previous, fieldwork: { ...previous.fieldwork, [currentLevelId]: { ...record, applied: true } } };
+    });
+  };
+
   const handleReachExit = useCallback(() => {
     setActiveScenarioId(null);
     setScreen('CHAPTER_DECISION');
@@ -179,6 +202,7 @@ export default function App() {
     setSeenChapters({});
     setCurrentLevelId(1);
     setActiveScenarioId(null);
+    setActiveFieldSite(null);
     setShowComicChapter(false);
     setShowLevelSelect(false);
     setShowBiasGuide(false);
@@ -190,6 +214,7 @@ export default function App() {
     screen === 'PLAYING' &&
     !isPlayerDefeated &&
     !activeScenarioId &&
+    !activeFieldSite &&
     !showComicChapter &&
     !showLevelSelect &&
     !showBiasGuide;
@@ -201,7 +226,8 @@ export default function App() {
         level={currentLevel}
         progress={progress}
         isActivePlay={isActivePlay}
-        onOpenTerminal={(id) => setActiveScenarioId(id)}
+        onOpenTerminal={setActiveScenarioId}
+        onOpenFieldSite={setActiveFieldSite}
         onReachExit={handleReachExit}
         onPlayerHpChange={(hp, max) => {
           setPlayerHp(hp);
@@ -247,7 +273,6 @@ export default function App() {
             onTouchInteract={() => setInteractSignal((s) => s + 1)}
             onTouchPulse={() => setPulseSignal((s) => s + 1)}
             onTouchDash={() => setDashSignal((signal) => signal + 1)}
-            onAdvanceLevel={handleReachExit}
           />
         </div>
       )}
@@ -270,6 +295,18 @@ export default function App() {
           attemptsSoFar={progress.scenarios[activeScenario.id]?.attempts ?? 0}
           onAttempt={handleScenarioAttempt}
           onClose={() => setActiveScenarioId(null)}
+        />
+      )}
+
+      {activeFieldSite && (
+        <FieldTestModal
+          key={activeFieldSite}
+          levelId={currentLevelId}
+          siteId={activeFieldSite}
+          record={fieldRecord(progress, currentLevelId)}
+          onCollect={handleCollectEvidence}
+          onApply={handleApplyFieldTest}
+          onClose={() => setActiveFieldSite(null)}
         />
       )}
 

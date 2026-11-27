@@ -51,9 +51,11 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       { tileX: 9, tileY: 2, widthTiles: 1, heightTiles: 8 },
       { tileX: 9, tileY: 12, widthTiles: 1, heightTiles: 2 },
       { tileX: 17, tileY: 2, widthTiles: 1, heightTiles: 4 },
-      { tileX: 17, tileY: 8, widthTiles: 1, heightTiles: 6 },
+      { tileX: 17, tileY: 8, widthTiles: 1, heightTiles: 2 },
+      { tileX: 17, tileY: 11, widthTiles: 1, heightTiles: 3 },
     ],
     gates: [
+      { id: 'field_1', tileX: 17, tileY: 10, widthTiles: 1, heightTiles: 1, requiresFieldTest: true },
       {
         id: 'g1_gold',
         tileX: 9,
@@ -160,6 +162,8 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
     ],
     furniture: [
+      { kind: 'cover', tileX: 6, tileY: 10, widthTiles: 2, heightTiles: 1 },
+      { kind: 'cover', tileX: 14, tileY: 4, widthTiles: 1, heightTiles: 2 },
       { kind: 'amp', tileX: 1, tileY: 2, widthTiles: 2, heightTiles: 1 },
       { kind: 'whiteboard', tileX: 3, tileY: 1, widthTiles: 4, heightTiles: 1 },
       { kind: 'poster', tileX: 11, tileY: 1, widthTiles: 3, heightTiles: 1 },
@@ -193,10 +197,12 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       { tileX: 6, tileY: 8, widthTiles: 2, heightTiles: 1 },
       { tileX: 8, tileY: 2, widthTiles: 1, heightTiles: 2 },
       { tileX: 8, tileY: 6, widthTiles: 1, heightTiles: 8 },
-      { tileX: 16, tileY: 2, widthTiles: 1, heightTiles: 8 },
+      { tileX: 16, tileY: 2, widthTiles: 1, heightTiles: 4 },
+      { tileX: 16, tileY: 7, widthTiles: 1, heightTiles: 3 },
       { tileX: 16, tileY: 12, widthTiles: 1, heightTiles: 2 },
     ],
     gates: [
+      { id: 'field_2', tileX: 16, tileY: 6, widthTiles: 1, heightTiles: 1, requiresFieldTest: true },
       {
         id: 'g2_sw',
         tileX: 4,
@@ -314,6 +320,9 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
     ],
     furniture: [
+      { kind: 'cover', tileX: 6, tileY: 10, widthTiles: 1, heightTiles: 1 },
+      { kind: 'cover', tileX: 13, tileY: 8, widthTiles: 1, heightTiles: 1 },
+      { kind: 'cover', tileX: 20, tileY: 7, widthTiles: 1, heightTiles: 2 },
       { kind: 'whiteboard', tileX: 10, tileY: 1, widthTiles: 4, heightTiles: 1 },
       { kind: 'poster', tileX: 18, tileY: 1, widthTiles: 3, heightTiles: 1 },
       { kind: 'amp', tileX: 1, tileY: 10, widthTiles: 2, heightTiles: 1 },
@@ -347,11 +356,13 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       { tileX: 8, tileY: 12, widthTiles: 1, heightTiles: 2 },
       { tileX: 1, tileY: 7, widthTiles: 7, heightTiles: 1 },
       { tileX: 16, tileY: 2, widthTiles: 1, heightTiles: 2 },
-      { tileX: 16, tileY: 6, widthTiles: 1, heightTiles: 4 },
+      { tileX: 16, tileY: 6, widthTiles: 1, heightTiles: 2 },
+      { tileX: 16, tileY: 9, widthTiles: 1, heightTiles: 1 },
       { tileX: 16, tileY: 12, widthTiles: 1, heightTiles: 2 },
       { tileX: 17, tileY: 7, widthTiles: 7, heightTiles: 1 },
     ],
     gates: [
+      { id: 'field_3', tileX: 16, tileY: 8, widthTiles: 1, heightTiles: 1, requiresFieldTest: true },
       {
         id: 'g3_cyan',
         tileX: 8,
@@ -479,6 +490,9 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
     ],
     furniture: [
+      { kind: 'cover', tileX: 11, tileY: 7, widthTiles: 2, heightTiles: 1 },
+      { kind: 'cover', tileX: 22, tileY: 10, widthTiles: 1, heightTiles: 1 },
+      { kind: 'cover', tileX: 4, tileY: 11, widthTiles: 1, heightTiles: 1 },
       { kind: 'whiteboard', tileX: 10, tileY: 1, widthTiles: 5, heightTiles: 1 },
       { kind: 'poster', tileX: 4, tileY: 1, widthTiles: 3, heightTiles: 1 },
       { kind: 'amp', tileX: 10, tileY: 2, widthTiles: 2, heightTiles: 1 },
@@ -516,11 +530,13 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       { tileX: 8, tileY: 8, widthTiles: 3, heightTiles: 1 },
       { tileX: 13, tileY: 8, widthTiles: 2, heightTiles: 1 },
       { tileX: 15, tileY: 2, widthTiles: 1, heightTiles: 1 },
-      { tileX: 15, tileY: 5, widthTiles: 1, heightTiles: 5 },
+      { tileX: 15, tileY: 5, widthTiles: 1, heightTiles: 1 },
+      { tileX: 15, tileY: 7, widthTiles: 1, heightTiles: 3 },
       { tileX: 15, tileY: 12, widthTiles: 1, heightTiles: 2 },
       { tileX: 16, tileY: 7, widthTiles: 8, heightTiles: 1 },
     ],
     gates: [
+      { id: 'field_4', tileX: 15, tileY: 6, widthTiles: 1, heightTiles: 1, requiresFieldTest: true },
       {
         id: 'g4_gold',
         tileX: 7,
@@ -618,8 +634,8 @@ export const LAB_LEVELS: LabLevelConfig[] = [
         waypoints: [
           { x: 9, y: 5 },
           { x: 13, y: 5 },
-          { x: 13, y: 10 },
-          { x: 9, y: 10 },
+          { x: 13, y: 6.4 },
+          { x: 9, y: 6.4 },
         ],
         speed: 2.5,
         maxHp: 3,
@@ -651,6 +667,9 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
     ],
     furniture: [
+      { kind: 'cover', tileX: 3, tileY: 8, widthTiles: 2, heightTiles: 1 },
+      { kind: 'cover', tileX: 12, tileY: 7, widthTiles: 1, heightTiles: 1 },
+      { kind: 'cover', tileX: 20, tileY: 6, widthTiles: 2, heightTiles: 1 },
       { kind: 'rack', tileX: 1, tileY: 2, widthTiles: 2, heightTiles: 1 },
       { kind: 'whiteboard', tileX: 9, tileY: 1, widthTiles: 5, heightTiles: 1 },
       { kind: 'amp', tileX: 9, tileY: 2, widthTiles: 2, heightTiles: 1 },
@@ -682,9 +701,9 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       { tileX: 13, tileY: 7, widthTiles: 11, heightTiles: 1 },
       { tileX: 9, tileY: 2, widthTiles: 1, heightTiles: 5 },
       { tileX: 16, tileY: 2, widthTiles: 1, heightTiles: 2 },
-      { tileX: 16, tileY: 6, widthTiles: 1, heightTiles: 1 },
     ],
     gates: [
+      { id: 'field_5', tileX: 16, tileY: 6, widthTiles: 1, heightTiles: 1, requiresFieldTest: true },
       {
         id: 'g5_laser',
         tileX: 3,
@@ -826,6 +845,9 @@ export const LAB_LEVELS: LabLevelConfig[] = [
       },
     ],
     furniture: [
+      { kind: 'cover', tileX: 9, tileY: 11, widthTiles: 1, heightTiles: 1 },
+      { kind: 'cover', tileX: 14, tileY: 9, widthTiles: 2, heightTiles: 1 },
+      { kind: 'cover', tileX: 22, tileY: 5, widthTiles: 1, heightTiles: 1 },
       { kind: 'amp', tileX: 10, tileY: 2, widthTiles: 2, heightTiles: 1 },
       { kind: 'amp', tileX: 14, tileY: 2, widthTiles: 2, heightTiles: 1 },
       { kind: 'whiteboard', tileX: 4, tileY: 1, widthTiles: 4, heightTiles: 1 },

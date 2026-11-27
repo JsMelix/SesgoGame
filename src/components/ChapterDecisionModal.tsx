@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { FIELD_TESTS } from '../data/fieldTests';
 import { ChapterStory } from '../data/story';
 import { retroAudio } from '../utils/audio';
 
@@ -27,6 +28,10 @@ export function ChapterDecisionModal({ chapter, onComplete }: ChapterDecisionMod
           </div>
         </header>
         <div className="field-decision-body">
+          <div className="field-mission">
+            <p className="field-kicker">Del tablero a la decisión</p>
+            <p>{FIELD_TESTS[chapter.levelId].takeaway}</p>
+          </div>
           <p>{prompt}</p>
           <div className="field-choices" aria-label="Acciones posibles">
             {options.map((option, index) => (

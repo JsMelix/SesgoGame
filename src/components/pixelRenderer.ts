@@ -1,7 +1,9 @@
+import { canLeaveRoom, fieldRecord, fieldSites, gateIsOpen } from '../game/fieldwork';
+import { clearDistance } from '../game/arenaGeometry';
 import { circuitPhase } from '../game/hazards';
 import type { ArenaTile } from '../game/arenaGrid';
 import type { ArenaObjective } from '../game/objectives';
-import { PARRY_RADIUS } from '../utils/combat';
+import { PARRY_RADIUS, SENTINEL_SHOT_SPEED } from '../utils/combat';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../data/levels';
 import {
   ChestConfig,
@@ -82,7 +84,7 @@ export interface ComicPopup {
 }
 
 export interface NearTargetInfo {
-  type: 'terminal' | 'npc' | 'exit' | 'chest' | 'gate' | 'switch';
+  type: 'terminal' | 'npc' | 'field' | 'exit' | 'chest' | 'gate' | 'switch';
   id: string;
   tileX: number;
   tileY: number;
@@ -169,6 +171,18 @@ function drawGate(
   const y = gate.tileY * TILE_SIZE;
   const w = gate.widthTiles * TILE_SIZE;
   const h = gate.heightTiles * TILE_SIZE;
+  if (gate.requiresFieldTest) {
+    const color = isOpen ? '#5EEAD4' : '#A78BFA';
+    px(ctx, x, y, w, h, isOpen ? '#17353D' : '#1F1238');
+    px(ctx, x, y + 2, 4, h - 4, '#5C5485');
+    px(ctx, x + w - 4, y + 2, 4, h - 4, '#5C5485');
+    px(ctx, x + 4, y + h - 4, w - 8, 2, color);
+    for (let bar = 6; bar < w - 5; bar += 4) {
+      if (!isOpen) px(ctx, x + bar, y + 3, 2, h - 8, color);
+    }
+    return;
+  }
+
 
   if (isOpen) {
     // Open steel threshold track
@@ -321,6 +335,25 @@ function drawFurnitureItem(
   const y = item.tileY * TILE_SIZE;
   const w = item.widthTiles * TILE_SIZE;
   const h = item.heightTiles * TILE_SIZE;
+
+  if (item.kind === 'cover') {
+    const top = ctx.createLinearGradient(0, y, 0, y + h);
+    top.addColorStop(0, '#51647C');
+    top.addColorStop(1, '#29334C');
+    px(ctx, x - 2, y + 2, w + 4, h + 1, '#060913');
+    ctx.fillStyle = top;
+    ctx.fillRect(x, y + 1, w, h - 6);
+    px(ctx, x + 2, y + 1, w - 4, 1, '#91A1C2');
+    px(ctx, x + 2, y + h - 8, w - 4, 6, '#142036');
+    px(ctx, x + 3, y + h - 8, w - 6, 1, accentColor + 'AA');
+    for (let bar = 6; bar < w - 5; bar += 8) {
+      px(ctx, x + bar, y + 5, 4, h - 16, '#192639');
+      px(ctx, x + bar, y + 5, 1, h - 16, '#7D90AA');
+    }
+    px(ctx, x + 3, y + h - 5, 4, 2, '#D8C897');
+    px(ctx, x + w - 7, y + h - 5, 4, 2, '#D8C897');
+    return;
+  }
 
   if (item.kind === 'amp') {
     px(ctx, x + 2, y - 4, w - 4, 28, '#05070B');
@@ -615,13 +648,14 @@ function drawLumenCompanion(ctx: CanvasRenderingContext2D, playerX: number, play
   px(ctx, lx + 9, ly + 6, 3, 3, '#F59E0B');
 }
 
-function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot) {
+function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot, state: RenderState) {
   if (bot.destroyed || bot.windupTimer <= 0) return;
   const x = bot.x * TILE_SIZE + 12;
   const y = bot.y * TILE_SIZE + 12;
   const isCharge = bot.kind === 'echo_bot';
   const angle = bot.aimAngle;
-  const length = (isCharge ? 3 : 8) * TILE_SIZE;
+  const distance = isCharge ? 3.1 : SENTINEL_SHOT_SPEED * 1.85;
+  const gates = { openedGates: state.openedGates, fieldApplied: fieldRecord(state.progress, state.level.id).applied };
   ctx.save();
   ctx.strokeStyle = isCharge ? '#FBBF24' : '#FB7185';
   ctx.lineWidth = isCharge ? 3 : 1.5;
@@ -629,7 +663,9 @@ function drawAttackWarning(ctx: CanvasRenderingContext2D, bot: ActiveGlitchBot) 
   for (const offset of isCharge ? [0] : bot.shotAngles) {
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(angle + offset) * length, y + Math.sin(angle + offset) * length);
+    const direction = angle + offset;
+    const length = clearDistance(state.level, gates, bot.x, bot.y, direction, distance) * TILE_SIZE;
+    ctx.lineTo(x + Math.cos(direction) * length, y + Math.sin(direction) * length);
     ctx.stroke();
   }
   ctx.restore();
@@ -760,6 +796,48 @@ function drawInteractionBubble(
   ctx.fillText(label, cx, cy + 7);
 }
 
+function drawFieldFixtures(ctx: CanvasRenderingContext2D, state: RenderState) {
+  const { level, progress } = state;
+  const record = fieldRecord(progress, level.id);
+  for (const site of fieldSites(level.id)) {
+    const isConsole = site.id === 'console';
+    const done = isConsole ? record.applied : record.sources.includes(site.id);
+    const color = done ? '#5EEAD4' : '#C4B5FD';
+    const x = site.x * TILE_SIZE;
+    const y = site.y * TILE_SIZE;
+    const width = isConsole ? 29 : 20;
+    const left = x + (24 - width) / 2;
+
+    // Mount the station over a recessed service bay.
+    ctx.fillStyle = '#080718DD';
+    ctx.beginPath();
+    ctx.ellipse(x + 12, y + 19, width / 2 + 7, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    px(ctx, left - 2, y + 8, width + 4, 10, '#17132C');
+    px(ctx, left, y + 3, width, 13, '#383051');
+    px(ctx, left + 2, y + 3, width - 4, 3, '#685482');
+    px(ctx, left + 2, y + 7, width - 4, 6, '#110F29');
+    if (isConsole) {
+      for (let cell = 0; cell < 5; cell++) px(ctx, left + 4 + cell * 4, y + 8 + cell % 2, 2, 4 - cell % 2, color);
+    } else {
+      px(ctx, left + 4, y + 8, width - 8, 1, color);
+      const detail = site.id === 'A' ? 6 : 9;
+      px(ctx, left + 4, y + 11, detail, 1, color);
+    }
+    px(ctx, left + 1, y + 16, width - 2, 2, color);
+    for (let step = 4; step < width - 3; step += 5) {
+      px(ctx, left + step, y + 21, 2, 1, color);
+    }
+
+    px(ctx, x + 5, y - 9, 14, 11, '#080718');
+    ctx.fillStyle = color;
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(isConsole ? '∆' : site.id, x + 12, y - 3);
+  }
+}
+
 function drawRoomMap(
   ctx: CanvasRenderingContext2D,
   state: RenderState,
@@ -778,8 +856,11 @@ function drawRoomMap(
   for (const wall of level.walls) {
     px(ctx, x + wall.tileX * cell, y + wall.tileY * cell, wall.widthTiles * cell, wall.heightTiles * cell, '#54647B');
   }
+  for (const item of level.furniture) {
+    if (item.kind === 'cover') px(ctx, x + item.tileX * cell, y + item.tileY * cell, item.widthTiles * cell, item.heightTiles * cell, '#7185A0');
+  }
   for (const gate of level.gates) {
-    if (!state.openedGates[gate.id]) {
+    if (!gateIsOpen(gate, state.openedGates, fieldRecord(state.progress, level.id).applied)) {
       px(ctx, x + gate.tileX * cell, y + gate.tileY * cell, gate.widthTiles * cell, gate.heightTiles * cell, '#D49854');
     }
   }
@@ -788,6 +869,11 @@ function drawRoomMap(
     const shielded = state.bots.some((bot) => !bot.destroyed && bot.linkedScenarioId === terminal.scenarioId);
     px(ctx, x + terminal.tileX * cell - 1, y + terminal.tileY * cell - 1, cell + 2, cell + 2,
       shielded ? '#FB7185' : solved ? '#34D399' : '#67E8F9');
+  }
+  const record = fieldRecord(state.progress, level.id);
+  for (const site of fieldSites(level.id)) {
+    const done = site.id === 'console' ? record.applied : record.sources.includes(site.id);
+    px(ctx, x + site.x * cell, y + site.y * cell, cell + 1, cell + 1, done ? '#5EEAD4' : '#C4B5FD');
   }
   const scale = cell / TILE_SIZE;
   ctx.strokeStyle = '#9BAAC585';
@@ -843,18 +929,17 @@ export function renderLabScene(
   drawInteriorWalls(ctx, level.walls, level);
 
   for (const gate of level.gates) {
-    drawGate(ctx, gate, Boolean(state.openedGates[gate.id]), timeSec);
+    drawGate(ctx, gate, gateIsOpen(gate, state.openedGates, fieldRecord(progress, level.id).applied), timeSec);
   }
 
   for (const sw of level.switches) {
     drawSwitch(ctx, sw, Boolean(state.activatedSwitches[sw.id]), timeSec);
   }
 
-  const solvedCount = level.terminals.filter((t) => progress.scenarios[t.scenarioId]?.solved).length;
-  const allEnemiesCleared = state.bots.every((b) => b.destroyed);
-  const exitUnlocked = solvedCount === 3 && allEnemiesCleared;
+  const exitUnlocked = canLeaveRoom(level, progress, state.bots.filter((bot) => !bot.destroyed).length);
 
   drawExitPortal(ctx, level, exitUnlocked, timeSec);
+  drawFieldFixtures(ctx, state);
 
   for (const item of level.furniture) {
     drawFurnitureItem(ctx, item, timeSec, level.accentColor);
@@ -946,7 +1031,7 @@ export function renderLabScene(
       ),
   });
 
-  for (const bot of state.bots) drawAttackWarning(ctx, bot);
+  for (const bot of state.bots) drawAttackWarning(ctx, bot, state);
 
   entities.sort((a, b) => a.y - b.y);
   for (const e of entities) {
@@ -1002,6 +1087,8 @@ export function renderLabScene(
       if (exitUnlocked) {
         drawInteractionBubble(ctx, nt.tileX, nt.tileY, 'SALIR', '#10B981');
       }
+    } else if (nt.type === 'field') {
+      drawInteractionBubble(ctx, nt.tileX, nt.tileY, 'EXAMINAR', '#C4B5FD');
     } else if (nt.type === 'chest') {
       drawInteractionBubble(ctx, nt.tileX, nt.tileY, 'ABRIR COFRE', '#F59E0B');
     } else if (nt.type === 'switch') {
